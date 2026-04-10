@@ -1,0 +1,8 @@
+/hammock
+/build/
+
+# libsci build artifacts
+libsci/*.dylib
+libsci/*.h
+libsci/target/
+libsci/.cpcache/
