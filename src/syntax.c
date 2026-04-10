@@ -532,6 +532,28 @@ static LineHighlight highlight_markdown(const char *line, int len, int state_in)
             continue;
         }
 
+        /* Inline math $...$ (single-line, not preceded by backslash, non-space
+         * after opening $). Emits three spans: open delim, content, close delim. */
+        if (line[i] == '$' && (i == 0 || line[i - 1] != '\\')) {
+            int open = i;
+            if (i + 1 < len && !isspace((unsigned char)line[i + 1]) && line[i + 1] != '$') {
+                int j = i + 1;
+                while (j < len && line[j] != '$') {
+                    if (line[j] == '\\' && j + 1 < len) { j += 2; continue; }
+                    j++;
+                }
+                if (j < len && line[j] == '$') {
+                    /* Matched: open at open, close at j */
+                    add_span(&hl, open, 1, TOK_MATH_DELIM);
+                    if (j - open - 1 > 0)
+                        add_span(&hl, open + 1, j - open - 1, TOK_MATH);
+                    add_span(&hl, j, 1, TOK_MATH_DELIM);
+                    i = j + 1;
+                    continue;
+                }
+            }
+        }
+
         /* Bold **text** or __text__ */
         if (i + 1 < len && ((line[i] == '*' && line[i + 1] == '*') ||
                             (line[i] == '_' && line[i + 1] == '_'))) {

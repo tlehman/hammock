@@ -1,5 +1,16 @@
 # Hammock NEWS -- history of user-visible changes.
 
+## Version 0.1.1 (2026-04-09)
+
+### Markdown Mode
+
+- Inline math rendering: text between single `$` delimiters is now displayed
+  with Unicode substitutions. Superscripts (`^0`..`^9`), subscripts
+  (`_0`..`_9`), Greek letters (`\alpha`, `\Omega`, ...), and common
+  operators (`\sum`, `\int`, `\infty`, `\leq`, `\to`, ...) render as their
+  Unicode equivalents. The `$` delimiters are drawn dim so the math region
+  stands out.
+
 ## Version 0.1.0 (2026-04-09)
 
 First release of Hammock, a terminal text editor with a minimal C kernel

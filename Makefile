@@ -1,6 +1,16 @@
 CC = cc
 CFLAGS = -Wall -Wextra -std=c11 -g -O2 -Ilibsci
-LDFLAGS = -lncurses -Llibsci -lsci -Wl,-rpath,@executable_path/libsci
+
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+  LIB_EXT = dylib
+  RPATH   = -Wl,-rpath,@executable_path/libsci
+else
+  LIB_EXT = so
+  RPATH   = -Wl,-rpath,$$ORIGIN/libsci
+endif
+
+LDFLAGS = -lncurses -Llibsci -lsci $(RPATH)
 
 SRC_DIR = src
 BUILD_DIR = build
@@ -9,8 +19,9 @@ SRCS = $(filter-out $(SRC_DIR)/nrepl.c $(SRC_DIR)/clojure.c, $(wildcard $(SRC_DI
 OBJS = $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 TARGET = hammock
 NEWS_HEADER = $(SRC_DIR)/news_data.h
+LIBSCI = libsci/libsci.$(LIB_EXT)
 
-$(TARGET): libsci/libsci.dylib $(NEWS_HEADER) $(OBJS)
+$(TARGET): $(LIBSCI) $(NEWS_HEADER) $(OBJS)
 	$(CC) $(OBJS) -o $@ $(LDFLAGS)
 
 # Embed NEWS.md into the binary as a C byte array
@@ -24,7 +35,7 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 # Build libsci shared library (requires nix develop for GraalVM)
-libsci/libsci.dylib:
+$(LIBSCI):
 	$(MAKE) -C libsci
 
 clean:
