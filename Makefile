@@ -24,6 +24,17 @@ LIBSCI = libsci/libsci.$(LIB_EXT)
 $(TARGET): $(LIBSCI) $(NEWS_HEADER) $(OBJS)
 	$(CC) $(OBJS) -o $@ $(LDFLAGS)
 
+# Non-interactive smoke test: links against libsci and runs the Clojure
+# load sequence plus a handful of probes. Run via `make check`.
+SMOKE_SRC = test/smoke.c
+SMOKE_BIN = $(BUILD_DIR)/smoke
+
+$(SMOKE_BIN): $(SMOKE_SRC) $(LIBSCI) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(SMOKE_SRC) -o $(SMOKE_BIN) $(LDFLAGS)
+
+check: $(SMOKE_BIN)
+	./$(SMOKE_BIN)
+
 # Embed NEWS.md into the binary as a C byte array
 $(NEWS_HEADER): NEWS.md
 	xxd -i NEWS.md > $(NEWS_HEADER)
@@ -44,4 +55,4 @@ clean:
 clean-all: clean
 	$(MAKE) -C libsci clean
 
-.PHONY: clean clean-all
+.PHONY: clean clean-all check
