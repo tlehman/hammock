@@ -805,7 +805,7 @@ static void cmd_eval_last_sexp(void) {
 static void cmd_execute_extended_command(void) {
     char *name = minibuffer_read("M-x ", complete_command_name);
     if (!name || name[0] == '\0') { message("Quit"); return; }
-    command_execute(name);
+    command_dispatch(name, sci_is_ready());
 }
 
 /* ---- Find Definition (M-.) ---- */

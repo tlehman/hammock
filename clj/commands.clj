@@ -1,6 +1,7 @@
 (ns hammock.commands
   (:require [hammock.state :as state]
             [hammock.effects :as fx]
+            [hammock.core :as core]
             [hammock.git :as git]
             [hammock.markdown :as md]
             [clojure.string :as str]))
@@ -450,3 +451,8 @@
         (swap! link-history pop)
         [[:buffer-switch buffer]
          [:point-set point]]))))
+
+;; ---- Version ----
+
+(defcommand "version" "Show the Hammock version in the minibuffer."
+  (fn [] [[:message (str "Hammock " (core/hammock-version))]]))

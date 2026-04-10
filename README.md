@@ -42,7 +42,6 @@ Each keystroke is dispatched through the keymap. Hot-path commands (cursor movem
 Users can modify editor behavior live via `C-j` in the scratch buffer.
 
 ## TODO 
-- [ ] feature: hammock source, load so M-. will work
 - [ ] feature: add a namespace/symbol explorer, so you can navigate through all the namespaces and symbols and finally jump to definition (is apropos this?)
 - [ ] feature: in markdown mode, math between dollar signs should render with Unicode in text mode, so $x^2$ shows as $x²$ but the dollar signs are a darker color
 - [ ] feature: M-<backspace> deletes who
