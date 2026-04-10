@@ -499,12 +499,18 @@
           selector (symbols/namespace-at-line line)]
       (if selector
         (let [text (symbols/format-symbol-pane selector)]
+          ;; window-other moves into whatever the other pane is holding —
+          ;; possibly a source file if the user just jumped to a symbol —
+          ;; so explicitly switch to *Symbol-Detail* before overwriting.
           [[:window-other]
+           [:buffer-create "*Symbol-Detail*"]
+           [:buffer-switch "*Symbol-Detail*"]
            [:buffer-set-read-only false]
            [:buffer-set-contents text]
            [:point-to-buffer-start]
            [:buffer-set-modified false]
-           [:buffer-set-read-only true]])
+           [:buffer-set-read-only true]
+           [:buffer-set-mode "Symbol-Detail"]])
         [[:message "Not on a namespace line"]]))))
 
 (defn- visit-symbol-effects [sym]
@@ -516,10 +522,9 @@
       [[:message (str "No source location for " (:name sym))]]
 
       :else
-      [[:window-delete-others]
-       [:buffer-destroy "*Symbol-Detail*"]
-       [:buffer-destroy "*Symbols*"]
-       [:buffer-create base]
+      ;; Keep the explorer buffers alive and the other pane visible so the
+      ;; user can C-o back to *Symbols* and pick another namespace/symbol.
+      [[:buffer-create base]
        [:buffer-switch base]
        [:buffer-load-file file]
        [:point-to-line line]])))
@@ -593,7 +598,7 @@
                       (first (filter #(= nm (:name %))
                                      (mapcat val (:modules idx)))))]
           (if hit
-            (into [[:buffer-destroy "*Apropos*"]] (visit-symbol-effects hit))
+            (visit-symbol-effects hit)
             [[:message (str "Symbol not in index: " nm)]]))))))
 
 (defcommand "apropos-quit"
