@@ -20,7 +20,10 @@
    {:id 7 :name "Buffer-List" :syntax "none"     :extensions [] :keymap nil}
    {:id 8 :name "Diff"        :syntax "diff"     :extensions [] :keymap "diff"}
    {:id 9 :name "Grep"        :syntax "none"     :extensions [] :keymap "grep"}
-   {:id 10 :name "Help"       :syntax "help"     :extensions [] :keymap nil}])
+   {:id 10 :name "Help"       :syntax "help"     :extensions [] :keymap nil}
+   {:id 11 :name "Symbol-Browser" :syntax "none" :extensions [] :keymap "symbol-browser"}
+   {:id 12 :name "Symbol-Detail"  :syntax "none" :extensions [] :keymap "symbol-detail"}
+   {:id 13 :name "Apropos"        :syntax "none" :extensions [] :keymap "apropos"}])
 
 ;; Detect mode from filename
 (defn detect-mode [filename]
