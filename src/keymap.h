@@ -48,6 +48,7 @@ typedef struct Keymap {
 
 extern Keymap global_keymap;
 extern Keymap cx_keymap;        /* C-x prefix */
+extern Keymap ch_keymap;        /* C-h help prefix */
 
 void keymap_init(Keymap *km, const char *name);
 void keymap_bind(Keymap *km, int key, int modifiers, const char *command);

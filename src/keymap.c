@@ -6,6 +6,7 @@
 
 Keymap global_keymap;
 Keymap cx_keymap;
+Keymap ch_keymap;
 Keymap f1_keymap;
 
 void keymap_init(Keymap *km, const char *name) {
@@ -63,6 +64,7 @@ const char *keymap_lookup(Keymap *km, int key, int modifiers, Keymap **submap_ou
 void keybindings_init(void) {
     keymap_init(&global_keymap, "global");
     keymap_init(&cx_keymap, "C-x");
+    keymap_init(&ch_keymap, "C-h");
     keymap_init(&f1_keymap, "F1");
 
     /* Movement */
@@ -215,6 +217,7 @@ void keybindings_load_edn(const char *edn) {
     /* Reset keymaps */
     keymap_init(&global_keymap, "global");
     keymap_init(&cx_keymap, "C-x");
+    keymap_init(&ch_keymap, "C-h");
     keymap_init(&f1_keymap, "F1");
     mode_keymap_count = 0;
 
@@ -241,6 +244,8 @@ void keybindings_load_edn(const char *edn) {
         if (strcmp(km_name, "prefix") == 0) {
             if (cmd_v->type == EDN_STRING && strcmp(cmd_v->str, "cx") == 0) {
                 keymap_bind_prefix(&global_keymap, key, mods, &cx_keymap);
+            } else if (cmd_v->type == EDN_STRING && strcmp(cmd_v->str, "ch") == 0) {
+                keymap_bind_prefix(&global_keymap, key, mods, &ch_keymap);
             } else if (cmd_v->type == EDN_STRING && strcmp(cmd_v->str, "f1") == 0) {
                 keymap_bind_prefix(&global_keymap, key, mods, &f1_keymap);
             }
@@ -256,6 +261,8 @@ void keybindings_load_edn(const char *edn) {
             target = &global_keymap;
         } else if (strcmp(km_name, "cx") == 0) {
             target = &cx_keymap;
+        } else if (strcmp(km_name, "ch") == 0) {
+            target = &ch_keymap;
         } else if (strcmp(km_name, "f1") == 0) {
             target = &f1_keymap;
         } else if (strncmp(km_name, "mode:", 5) == 0) {
@@ -321,6 +328,8 @@ int keymap_reverse_lookup(const char *command, KeyBindingResult *results, int ma
     count = reverse_lookup_keymap(&global_keymap, "", command, results, max_results, count);
     /* Search C-x keymap */
     count = reverse_lookup_keymap(&cx_keymap, "C-x ", command, results, max_results, count);
+    /* Search C-h keymap */
+    count = reverse_lookup_keymap(&ch_keymap, "C-h ", command, results, max_results, count);
     /* Search F1 keymap */
     count = reverse_lookup_keymap(&f1_keymap, "F1 ", command, results, max_results, count);
     /* Search mode keymaps */

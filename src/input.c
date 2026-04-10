@@ -143,7 +143,10 @@ KeyEvent input_read(void) {
     switch (ch) {
         case KEY_BACKSPACE:
         case 127:
-        case 8:
+            /* Byte 8 (^H) falls through to the default case so it maps to
+             * C-h; modern terminals send 127 or KEY_BACKSPACE for the
+             * Backspace key, so this keeps Backspace working while freeing
+             * C-h to be a prefix. */
             ev.key = HK_BACKSPACE;
             ev.modifiers &= ~MOD_META;  /* backspace, not M-backspace usually */
             break;
