@@ -189,3 +189,166 @@
                    :doc (or doc "")})))
          (sort-by :name)
          vec)))
+
+;; ---- Renderers ----
+
+(defn- truncate [s n]
+  (if (<= (count s) n) s (str (subs s 0 (max 0 (- n 1))) "…")))
+
+(defn- kind-tag [k]
+  (case k
+    :cmd      "cmd "
+    :defn     "defn"
+    :def      "def "
+    :defonce  "onc "
+    :defmacro "mac "
+    :fn       "fn  "
+    :c-macro  "#def"
+    :typedef  "typ "
+    :struct   "str "
+    "    "))
+
+(defn- pad-right [s n]
+  (let [s (truncate s n)]
+    (str s (apply str (repeat (max 0 (- n (count s))) \space)))))
+
+(def ^:private no-source-line
+  "  (no source tree found — set HAMMOCK_SOURCE)\n")
+
+(defn format-namespace-pane
+  "Return the text for the left pane: three roots with their namespaces/modules
+  and symbol counts."
+  []
+  (let [idx (ensure!)
+        header "  Namespaces and modules (Enter to drill in)\n\n"
+        sep   "\n"
+        clj-lines (if (nil? (:source-root idx))
+                    [no-source-line]
+                    (for [[ns syms] (:namespaces idx)]
+                      (format "  %s (%d)\n" (pad-right ns 28) (count syms))))
+        c-lines   (if (nil? (:source-root idx))
+                    [no-source-line]
+                    (for [[path syms] (:modules idx)]
+                      (format "  %s (%d)\n" (pad-right path 28) (count syms))))
+        cmd-line  (format "  %s (%d)\n"
+                          (pad-right "(all)" 28) (count (:commands idx)))]
+    (str header
+         "Clojure\n" (apply str clj-lines) sep
+         "C\n" (apply str c-lines) sep
+         "Commands\n" cmd-line)))
+
+(defn- format-symbol-line [sym]
+  (let [tag  (kind-tag (:kind sym))
+        nm   (pad-right (:name sym) 28)
+        info (let [d (:doc sym)]
+               (if (str/blank? d) "(no docstring)" d))]
+    (format "  [%s] %s — %s\n" tag nm (truncate info 120))))
+
+(defn format-symbol-pane
+  "Return the text for the right pane given a selected namespace/module name."
+  [selector]
+  (let [idx (ensure!)
+        syms (cond
+               (= selector "(all)")          (:commands idx)
+               (contains? (:namespaces idx) selector)
+               (get-in idx [:namespaces selector])
+               (contains? (:modules idx) selector)
+               (get-in idx [:modules selector])
+               :else nil)]
+    (cond
+      (nil? syms)  (str "  (unknown: " selector ")\n")
+      (empty? syms) "  (empty)\n"
+      :else (apply str (map format-symbol-line syms)))))
+
+(defn all-symbols-flat
+  "Return a flat vector of every indexed symbol."
+  []
+  (let [idx (ensure!)]
+    (concat (mapcat val (:namespaces idx))
+            (mapcat val (:modules idx))
+            (:commands idx))))
+
+(defn apropos-match
+  "Return symbols whose name or docstring contains `pattern` (case-insensitive)."
+  [pattern]
+  (let [needle (str/lower-case (or pattern ""))]
+    (->> (all-symbols-flat)
+         (filter (fn [{:keys [name doc namespace]}]
+                   (or (str/includes? (str/lower-case (or name "")) needle)
+                       (str/includes? (str/lower-case (or doc "")) needle)
+                       (str/includes? (str/lower-case (or namespace "")) needle))))
+         (sort-by (fn [s] [(:namespace s) (:name s)]))
+         vec)))
+
+(defn format-apropos
+  "Return text for the *Apropos* buffer for a given pattern."
+  [pattern]
+  (let [hits (apropos-match pattern)]
+    (if (empty? hits)
+      (str "  No matches for \"" pattern "\"\n")
+      (apply str
+             (format "  Apropos: %s  (%d matches)\n\n" pattern (count hits))
+             (map (fn [sym]
+                    (format "  [%s] %s/%s — %s\n"
+                            (kind-tag (:kind sym))
+                            (pad-right (:namespace sym) 24)
+                            (pad-right (:name sym) 24)
+                            (truncate (let [d (:doc sym)]
+                                        (if (str/blank? d) "(no docstring)" d))
+                                      60)))
+                  hits)))))
+
+(defn name-at-line
+  "Parse the symbol name out of a line rendered by format-symbol-line.
+  Format: `  [kind] <name padded to 28> — <info>`."
+  [line]
+  (let [s (or line "")]
+    (when (and (>= (count s) 40)
+               (str/starts-with? s "  ["))
+      (str/trim (subs s 9 37)))))
+
+(defn namespace-at-line
+  "Parse the namespace name out of a line rendered by format-namespace-pane.
+  Format: `  <name padded to 28> (N)`."
+  [line]
+  (let [s (or line "")]
+    (when (and (>= (count s) 4)
+               (str/starts-with? s "  ")
+               (not (#{"  C" "  Clojure" "  Commands"} s))
+               (not (str/starts-with? s "  Namespaces"))
+               (not (str/starts-with? s "  (no source tree")))
+      (let [trimmed (str/trim (subs s 2))
+            paren (.indexOf trimmed "(")]
+        (if (neg? paren)
+          trimmed
+          (str/trim (subs trimmed 0 paren)))))))
+
+(defn apropos-name-at-line
+  "Parse the symbol name out of a line rendered by format-apropos.
+  Format: `  [kind] <ns padded to 24>/<name padded to 24> — <doc>`."
+  [line]
+  (let [s (or line "")]
+    (when (and (>= (count s) 40) (str/starts-with? s "  ["))
+      (let [after-ns (subs s 9)
+            slash (.indexOf after-ns "/")]
+        (when (pos? slash)
+          (let [name-region (subs after-ns (inc slash))
+                dash (.indexOf name-region "—")]
+            (str/trim (if (neg? dash) name-region (subs name-region 0 dash)))))))))
+
+(defn lookup-symbol
+  "Find a fully-qualified or bare symbol in the index and return its map."
+  [ns-name sym-name]
+  (let [idx (ensure!)
+        candidates (concat (get-in idx [:namespaces ns-name])
+                           (get-in idx [:modules ns-name])
+                           (when (= ns-name "commands") (:commands idx))
+                           (when (#{"Clojure" "C" "Commands"} ns-name)
+                             (all-symbols-flat)))]
+    (first (filter #(= sym-name (:name %)) candidates))))
+
+(defn find-command
+  "Find a command by name in the commands list."
+  [sym-name]
+  (let [idx (ensure!)]
+    (first (filter #(= sym-name (:name %)) (:commands idx)))))
