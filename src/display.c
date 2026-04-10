@@ -44,6 +44,10 @@ void display_init(void) {
     init_pair(COLOR_DIFF_DEL, COLOR_RED, -1);
     init_pair(COLOR_DIFF_HEADER, COLOR_CYAN, -1);
 
+    /* Math (inline $...$ in markdown) */
+    init_pair(COLOR_MATH, COLOR_MAGENTA, -1);
+    init_pair(COLOR_MATH_DELIM, COLOR_BLACK, -1);
+
     curs_set(1);
     /* Request blinking block cursor via terminal escape sequence */
     printf("\033[1 q");
@@ -81,8 +85,108 @@ static int token_color(TokenType type) {
         case TOK_DIFF_ADD:    return COLOR_DIFF_ADD;
         case TOK_DIFF_DEL:    return COLOR_DIFF_DEL;
         case TOK_DIFF_HEADER: return COLOR_DIFF_HEADER;
+        case TOK_MATH:        return COLOR_MATH;
+        case TOK_MATH_DELIM:  return COLOR_MATH_DELIM;
         default:              return 0;
     }
+}
+
+/* LaTeX-like source → Unicode substitutions for inline math ($...$). */
+static const struct { const char *src; const char *dst; } math_subs[] = {
+    /* Operators with longer names first (longest-match wins) */
+    {"\\rightarrow", "→"},
+    {"\\leftarrow",  "←"},
+    {"\\epsilon",    "ε"},
+    {"\\Epsilon",    "Ε"},
+    {"\\upsilon",    "υ"},
+    {"\\Upsilon",    "Υ"},
+    {"\\lambda",     "λ"},
+    {"\\Lambda",     "Λ"},
+    {"\\approx",     "≈"},
+    {"\\exists",     "∃"},
+    {"\\forall",     "∀"},
+    {"\\gamma",      "γ"},
+    {"\\Gamma",      "Γ"},
+    {"\\delta",      "δ"},
+    {"\\Delta",      "Δ"},
+    {"\\theta",      "θ"},
+    {"\\Theta",      "Θ"},
+    {"\\kappa",      "κ"},
+    {"\\Kappa",      "Κ"},
+    {"\\sigma",      "σ"},
+    {"\\Sigma",      "Σ"},
+    {"\\omega",      "ω"},
+    {"\\Omega",      "Ω"},
+    {"\\alpha",      "α"},
+    {"\\Alpha",      "Α"},
+    {"\\infty",      "∞"},
+    {"\\times",      "×"},
+    {"\\nabla",      "∇"},
+    {"\\sqrt",       "√"},
+    {"\\beta",       "β"},
+    {"\\Beta",       "Β"},
+    {"\\zeta",       "ζ"},
+    {"\\Zeta",       "Ζ"},
+    {"\\iota",       "ι"},
+    {"\\Iota",       "Ι"},
+    {"\\sum",        "∑"},
+    {"\\int",        "∫"},
+    {"\\prod",       "∏"},
+    {"\\leq",        "≤"},
+    {"\\geq",        "≥"},
+    {"\\neq",        "≠"},
+    {"\\div",        "÷"},
+    {"\\cdot",       "·"},
+    {"\\partial",    "∂"},
+    {"\\eta",        "η"},
+    {"\\Eta",        "Η"},
+    {"\\mu",         "μ"},
+    {"\\Mu",         "Μ"},
+    {"\\nu",         "ν"},
+    {"\\Nu",         "Ν"},
+    {"\\xi",         "ξ"},
+    {"\\Xi",         "Ξ"},
+    {"\\pi",         "π"},
+    {"\\Pi",         "Π"},
+    {"\\rho",        "ρ"},
+    {"\\Rho",        "Ρ"},
+    {"\\tau",        "τ"},
+    {"\\Tau",        "Τ"},
+    {"\\phi",        "φ"},
+    {"\\Phi",        "Φ"},
+    {"\\chi",        "χ"},
+    {"\\Chi",        "Χ"},
+    {"\\psi",        "ψ"},
+    {"\\Psi",        "Ψ"},
+    {"\\pm",         "±"},
+    {"\\to",         "→"},
+    {"\\in",         "∈"},
+    /* Superscripts: ^0..^9 */
+    {"^0", "⁰"}, {"^1", "¹"}, {"^2", "²"}, {"^3", "³"}, {"^4", "⁴"},
+    {"^5", "⁵"}, {"^6", "⁶"}, {"^7", "⁷"}, {"^8", "⁸"}, {"^9", "⁹"},
+    /* Subscripts: _0.._9 */
+    {"_0", "₀"}, {"_1", "₁"}, {"_2", "₂"}, {"_3", "₃"}, {"_4", "₄"},
+    {"_5", "₅"}, {"_6", "₆"}, {"_7", "₇"}, {"_8", "₈"}, {"_9", "₉"},
+};
+
+static const int math_subs_count = (int)(sizeof(math_subs) / sizeof(math_subs[0]));
+
+/* Look up a math substitution at line[i..len]. On match, returns the UTF-8
+ * replacement and sets *consumed to the number of source chars matched.
+ * Returns NULL on no match. */
+static const char *math_sub_at(const char *line, int len, int i, int *consumed) {
+    const char *best = NULL;
+    int best_len = 0;
+    for (int k = 0; k < math_subs_count; k++) {
+        int slen = (int)strlen(math_subs[k].src);
+        if (slen > len - i) continue;
+        if (memcmp(line + i, math_subs[k].src, slen) == 0 && slen > best_len) {
+            best = math_subs[k].dst;
+            best_len = slen;
+        }
+    }
+    if (best) { *consumed = best_len; return best; }
+    return NULL;
 }
 
 /* Get extra attributes for token type */
@@ -93,6 +197,7 @@ static int token_attr(TokenType type) {
         case TOK_BOLD:      return A_BOLD;
         case TOK_ITALIC:    return A_UNDERLINE;
         case TOK_KEYWORD:   return A_BOLD;
+        case TOK_MATH_DELIM: return A_DIM;
         default:            return 0;
     }
 }
@@ -194,13 +299,37 @@ void display_refresh_window(Window *win, bool is_current) {
             /* Determine syntax color for this position */
             int color_pair = 0;
             int extra_attr = 0;
+            TokenType token_type = TOK_NORMAL;
             int char_offset = (int)(pos - line_start_pos);
             for (int s = 0; s < hl.count; s++) {
                 if (char_offset >= hl.spans[s].start &&
                     char_offset < hl.spans[s].start + hl.spans[s].length) {
                     color_pair = token_color(hl.spans[s].type);
                     extra_attr = token_attr(hl.spans[s].type);
+                    token_type = hl.spans[s].type;
                     break;
+                }
+            }
+
+            /* Inline math: try to substitute a LaTeX-like sequence with Unicode. */
+            if (token_type == TOK_MATH && line_text) {
+                int consumed = 0;
+                const char *sub = math_sub_at(line_text, line_len, char_offset, &consumed);
+                if (sub && consumed > 0) {
+                    if (has_region && pos >= region_start && pos < region_end) {
+                        attron(COLOR_PAIR(COLOR_REGION));
+                        mvaddstr(win->y + row, win->x + col, sub);
+                        attroff(COLOR_PAIR(COLOR_REGION));
+                    } else if (color_pair) {
+                        attron(COLOR_PAIR(color_pair) | extra_attr);
+                        mvaddstr(win->y + row, win->x + col, sub);
+                        attroff(COLOR_PAIR(color_pair) | extra_attr);
+                    } else {
+                        mvaddstr(win->y + row, win->x + col, sub);
+                    }
+                    col++;
+                    pos += consumed;
+                    continue;
                 }
             }
 
