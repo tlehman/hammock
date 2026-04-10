@@ -34,7 +34,6 @@
         (when (file-exists? (str s "/clj/state.clj")) s))
       (when (file-exists? "clj/state.clj") ".")))
 
-(declare build-commands-index)
 
 (def ^:private ns-re        #"^\(ns\s+([a-zA-Z0-9.\-]+)")
 (def ^:private defn-re      #"^\(defn-?\s+([a-zA-Z0-9!?*+<>=\-]+)(?:\s+\"([^\"]*)\")?")
@@ -173,5 +172,20 @@
 (defn ensure! []
   (or @index-atom (rebuild!)))
 
-;; Stub filled in by a later task.
-(defn- build-commands-index [_clojure-index] [])
+(defn- build-commands-index [clojure-index]
+  (let [cmd-index (->> (get clojure-index "hammock.commands" [])
+                       (filter #(= :cmd (:kind %)))
+                       (map (juxt :name identity))
+                       (into {}))]
+    (->> @state/*commands*
+         (map (fn [[nm entry]]
+                (let [doc (if (map? entry) (:doc entry) "")
+                      located (get cmd-index nm)]
+                  {:kind :cmd
+                   :name nm
+                   :namespace "commands"
+                   :file (or (:file located) "")
+                   :line (or (:line located) 0)
+                   :doc (or doc "")})))
+         (sort-by :name)
+         vec)))
