@@ -1,5 +1,6 @@
 /hammock
 /build/
+src/news_data.h
 
 # libsci build artifacts
 libsci/*.dylib

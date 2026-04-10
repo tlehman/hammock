@@ -9,6 +9,7 @@
 #include "markdown.h"
 #include "shell.h"
 #include "git.h"
+#include "news.h"
 #include "effects.h"
 #include "util.h"
 #include <stdio.h>
@@ -250,6 +251,7 @@ int main(int argc, char *argv[]) {
     /* Initialize C subsystems */
     commands_init();
     shell_commands_init();
+    news_init();
     display_init();
     input_init();
 
@@ -266,12 +268,12 @@ int main(int argc, char *argv[]) {
         /* Load Clojure modules in dependency order */
         free(sci_load_file("clj/state.clj"));
         free(sci_load_file("clj/effects.clj"));
+        free(sci_load_file("clj/core.clj"));
         free(sci_load_file("clj/git.clj"));
         free(sci_load_file("clj/markdown.clj"));
         free(sci_load_file("clj/commands.clj"));
         free(sci_load_file("clj/keybindings.clj"));
         free(sci_load_file("clj/modes.clj"));
-        free(sci_load_file("clj/core.clj"));
 
         /* Load keybindings from Clojure */
         char *kb_edn = sci_eval("(hammock.keybindings/export)");

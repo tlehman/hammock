@@ -157,7 +157,14 @@
 ;; F1 help prefix bindings
 (def f1-bindings
   [["k" "describe-key"]
-   ["f" "describe-function"]])
+   ["f" "describe-function"]
+   ["n" "view-news"]])
+
+;; C-h help prefix bindings (Emacs-style, mirrors F1)
+(def ch-bindings
+  [["k" "describe-key"]
+   ["f" "describe-function"]
+   ["n" "view-news"]])
 
 ;; Mode-specific keybindings
 (def mode-bindings
@@ -197,17 +204,21 @@
         global (encode "global" global-bindings)
         cx (encode "cx" cx-bindings)
         f1 (encode "f1" f1-bindings)
+        ch (encode "ch" ch-bindings)
         prefix-cx (let [[key mods] (parse-key-spec "C-x")]
                     [["prefix" key mods "cx"]])
         prefix-f1 [["prefix" 4112 0 "f1"]]  ;; HK_F1 = 0x1010 = 4112
+        prefix-ch (let [[key mods] (parse-key-spec "C-h")]
+                    [["prefix" key mods "ch"]])
         modes (mapcat (fn [[mode-name bindings]]
                         (encode (str "mode:" mode-name) bindings))
                       mode-bindings)]
-    (vec (concat global cx f1 prefix-cx prefix-f1 modes))))
+    (vec (concat global cx f1 ch prefix-cx prefix-f1 prefix-ch modes))))
 
 ;; Store in atom for live modification
 (reset! state/*keybindings*
         {:global global-bindings
          :cx cx-bindings
          :f1 f1-bindings
+         :ch ch-bindings
          :modes mode-bindings})
