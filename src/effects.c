@@ -244,6 +244,17 @@ static int execute_one_effect(EdnVal *effect) {
     else if (strcmp(op, "point-to-buffer-end") == 0) {
         buf->point = buffer_length(buf);
     }
+    else if (strcmp(op, "point-to-line") == 0) {
+        long long n = edn_int_val(effect->vec.items[1], 1);
+        if (n < 1) n = 1;
+        buf->point = 0;
+        for (long long i = 1; i < n; i++) {
+            size_t next = buffer_next_line_start(buf, buf->point);
+            if (next == buf->point) break;
+            buf->point = next;
+        }
+        win->target_col = -1;
+    }
     else if (strcmp(op, "point-forward-word") == 0) {
         buf->point = buffer_forward_word(buf, buf->point);
     }
