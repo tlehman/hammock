@@ -320,8 +320,8 @@
                (not (str/starts-with? s "  Namespaces"))
                (not (str/starts-with? s "  (no source tree")))
       (let [trimmed (str/trim (subs s 2))
-            paren (.indexOf trimmed "(")]
-        (if (neg? paren)
+            paren (str/index-of trimmed "(")]
+        (if (nil? paren)
           trimmed
           (str/trim (subs trimmed 0 paren)))))))
 
@@ -332,11 +332,11 @@
   (let [s (or line "")]
     (when (and (>= (count s) 40) (str/starts-with? s "  ["))
       (let [after-ns (subs s 9)
-            slash (.indexOf after-ns "/")]
-        (when (pos? slash)
+            slash (str/index-of after-ns "/")]
+        (when (and slash (pos? slash))
           (let [name-region (subs after-ns (inc slash))
-                dash (.indexOf name-region "—")]
-            (str/trim (if (neg? dash) name-region (subs name-region 0 dash)))))))))
+                dash (str/index-of name-region "—")]
+            (str/trim (if (nil? dash) name-region (subs name-region 0 dash)))))))))
 
 (defn lookup-symbol
   "Find a fully-qualified or bare symbol in the index and return its map."
