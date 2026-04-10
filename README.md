@@ -43,8 +43,9 @@ Users can modify editor behavior live via `C-j` in the scratch buffer.
 
 ## TODO 
 - [ ] feature: add a namespace/symbol explorer, so you can navigate through all the namespaces and symbols and finally jump to definition (is apropos this?)
-- [ ] feature: in markdown mode, math between dollar signs should render with Unicode in text mode, so $x^2$ shows as $x²$ but the dollar signs are a darker color
-- [ ] feature: M-<backspace> deletes who
+- [ ] feature: git mode view git log
+- [ ] feature: in markdown mode, tables are displayed with padding and look rectangular (like org-mode)
+- [ ] feature: M-<backspace> deletes whole word
 - [ ] feature: in *scratch* buffer, format all the outputted source code 
 - [ ] feature: tab and code indenting correctly
 - [ ] feature: add mermaidjs tui-rendering for markdown mode
