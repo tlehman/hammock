@@ -19,6 +19,8 @@
 ;;    :doc       string}
 (defonce index-atom (atom nil))
 
+(declare build-commands-index)
+
 (defn- env [name]
   (let [out (:out (shell/exec ["sh" "-c" (str "printf %s \"${" name "}\"")]))]
     (when-not (str/blank? out) out)))
