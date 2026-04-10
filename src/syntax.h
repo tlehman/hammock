@@ -23,6 +23,8 @@ typedef enum {
     TOK_DIFF_ADD,
     TOK_DIFF_DEL,
     TOK_DIFF_HEADER,
+    TOK_MATH,
+    TOK_MATH_DELIM,
 } TokenType;
 
 /* A colored span within a line */

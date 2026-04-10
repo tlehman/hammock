@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
+#include <locale.h>
 #include <ncurses.h>
 
 static volatile sig_atomic_t got_sigwinch = 0;
@@ -248,6 +249,10 @@ static void handle_mouse(void) {
 }
 
 int main(int argc, char *argv[]) {
+    /* Enable UTF-8 output so ncurses renders multi-byte characters
+     * (needed for inline math Unicode substitutions). */
+    setlocale(LC_ALL, "");
+
     /* Initialize C subsystems */
     commands_init();
     shell_commands_init();

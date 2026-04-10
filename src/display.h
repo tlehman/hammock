@@ -27,6 +27,8 @@
 #define COLOR_DIFF_ADD      30
 #define COLOR_DIFF_DEL      31
 #define COLOR_DIFF_HEADER   32
+#define COLOR_MATH          33
+#define COLOR_MATH_DELIM    34
 
 void display_init(void);
 void display_end(void);
