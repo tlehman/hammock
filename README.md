@@ -42,7 +42,7 @@ Each keystroke is dispatched through the keymap. Hot-path commands (cursor movem
 Users can modify editor behavior live via `C-j` in the scratch buffer.
 
 ## TODO 
-- [ ] feature: add a namespace/symbol explorer, so you can navigate through all the namespaces and symbols and finally jump to definition (is apropos this?)
+- [x] feature: add a namespace/symbol explorer, so you can navigate through all the namespaces and symbols and finally jump to definition
 - [ ] feature: git mode view git log
 - [ ] feature: in markdown mode, tables are displayed with padding and look rectangular (like org-mode)
 - [ ] feature: M-<backspace> deletes whole word

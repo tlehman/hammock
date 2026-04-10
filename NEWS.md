@@ -1,5 +1,22 @@
 # Hammock NEWS -- history of user-visible changes.
 
+## Version 0.1.2 (2026-04-09)
+
+### Introspection
+
+- New namespace/symbol explorer: `C-h s` (also `F1 s`) opens a two-pane
+  buffer listing Clojure namespaces, C modules, and registered commands,
+  with symbol counts. `Enter` on a namespace drills into its symbols;
+  `Enter` on a symbol jumps to its definition. `g` rebuilds the index,
+  `q` closes the explorer.
+- New `apropos` command (`C-h a`) prompts for a pattern and shows a flat
+  list of matching symbols across every indexed source. `Enter` jumps to
+  the definition.
+- Both commands share a cached index built from `clj/*.clj`, `src/*.{c,h}`,
+  and the live commands table, refreshable via `g` inside either buffer.
+- New effect `[:point-to-line N]` jumps to an absolute 1-indexed line
+  number, used by the explorer's jump-to-definition.
+
 ## Version 0.1.1 (2026-04-09)
 
 ### Markdown Mode
