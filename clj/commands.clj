@@ -4,6 +4,7 @@
             [hammock.core :as core]
             [hammock.git :as git]
             [hammock.markdown :as md]
+            [hammock.symbols :as symbols]
             [clojure.string :as str]))
 
 ;; Register a command: associates a name string with a map of {:fn f :doc docstring}
@@ -451,6 +452,108 @@
         (swap! link-history pop)
         [[:buffer-switch buffer]
          [:point-set point]]))))
+
+;; ---- Symbol explorer ----
+
+(defn- first-namespace-for-pane []
+  (let [idx (symbols/ensure!)]
+    (or (first (keys (:namespaces idx)))
+        (first (keys (:modules idx)))
+        "(all)")))
+
+(defn- symbol-browser-layout-effects []
+  (let [ns-text (symbols/format-namespace-pane)
+        first-ns (first-namespace-for-pane)
+        sym-text (symbols/format-symbol-pane first-ns)]
+    [[:window-delete-others]
+     [:buffer-create "*Symbols*"]
+     [:buffer-switch "*Symbols*"]
+     [:buffer-set-read-only false]
+     [:buffer-set-contents ns-text]
+     [:point-to-buffer-start]
+     [:buffer-set-modified false]
+     [:buffer-set-read-only true]
+     [:buffer-set-mode "Symbol-Browser"]
+     [:window-split-right]
+     [:window-other]
+     [:buffer-create "*Symbol-Detail*"]
+     [:buffer-switch "*Symbol-Detail*"]
+     [:buffer-set-read-only false]
+     [:buffer-set-contents sym-text]
+     [:point-to-buffer-start]
+     [:buffer-set-modified false]
+     [:buffer-set-read-only true]
+     [:buffer-set-mode "Symbol-Detail"]
+     [:window-other]]))
+
+(defcommand "browse-symbols"
+  "Open the namespace/symbol explorer."
+  (fn []
+    (symbols/ensure!)
+    (symbol-browser-layout-effects)))
+
+(defcommand "symbrowse-select"
+  "Populate the right pane with symbols of the namespace at point."
+  (fn []
+    (let [line (fx/current-line)
+          selector (symbols/namespace-at-line line)]
+      (if selector
+        (let [text (symbols/format-symbol-pane selector)]
+          [[:window-other]
+           [:buffer-set-read-only false]
+           [:buffer-set-contents text]
+           [:point-to-buffer-start]
+           [:buffer-set-modified false]
+           [:buffer-set-read-only true]])
+        [[:message "Not on a namespace line"]]))))
+
+(defn- visit-symbol-effects [sym]
+  (let [file (:file sym)
+        line (:line sym)
+        base (when file (last (str/split file #"/")))]
+    (cond
+      (or (str/blank? file) (zero? (or line 0)))
+      [[:message (str "No source location for " (:name sym))]]
+
+      :else
+      [[:window-delete-others]
+       [:buffer-destroy "*Symbol-Detail*"]
+       [:buffer-destroy "*Symbols*"]
+       [:buffer-create base]
+       [:buffer-switch base]
+       [:buffer-load-file file]
+       [:point-to-line line]])))
+
+(defcommand "symbrowse-visit"
+  "Jump to the definition of the symbol at point in the explorer."
+  (fn []
+    (let [line (fx/current-line)
+          nm (symbols/name-at-line line)]
+      (if (str/blank? nm)
+        [[:message "No symbol at point"]]
+        (let [idx (symbols/ensure!)
+              hit (or (symbols/find-command nm)
+                      (first (filter #(= nm (:name %))
+                                     (mapcat val (:namespaces idx))))
+                      (first (filter #(= nm (:name %))
+                                     (mapcat val (:modules idx)))))]
+          (if hit
+            (visit-symbol-effects hit)
+            [[:message (str "Symbol not in index: " nm)]]))))))
+
+(defcommand "symbrowse-refresh"
+  "Rebuild the symbol index and re-render the explorer."
+  (fn []
+    (symbols/rebuild!)
+    (symbol-browser-layout-effects)))
+
+(defcommand "symbrowse-quit"
+  "Close the symbol explorer."
+  (fn []
+    [[:buffer-destroy "*Symbol-Detail*"]
+     [:buffer-destroy "*Symbols*"]
+     [:window-delete-others]
+     [:buffer-switch "*scratch*"]]))
 
 ;; ---- Version ----
 
