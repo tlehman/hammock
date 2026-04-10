@@ -158,13 +158,16 @@
 (def f1-bindings
   [["k" "describe-key"]
    ["f" "describe-function"]
-   ["n" "view-news"]])
+   ["n" "view-news"]
+   ["s" "browse-symbols"]])
 
 ;; C-h help prefix bindings (Emacs-style, mirrors F1)
 (def ch-bindings
   [["k" "describe-key"]
    ["f" "describe-function"]
-   ["n" "view-news"]])
+   ["n" "view-news"]
+   ["s" "browse-symbols"]
+   ["a" "apropos"]])
 
 ;; Mode-specific keybindings
 (def mode-bindings
@@ -189,7 +192,21 @@
    "buffer-list"  [["Enter" "buflist-visit"]
                    ["D"     "buflist-mark-delete"]
                    ["x"     "buflist-execute"]
-                   ["q"     "buflist-quit"]]})
+                   ["q"     "buflist-quit"]]
+   "symbol-browser" [["n"     "next-line"]
+                     ["p"     "previous-line"]
+                     ["Enter" "symbrowse-select"]
+                     ["g"     "symbrowse-refresh"]
+                     ["q"     "symbrowse-quit"]]
+   "symbol-detail"  [["n"     "next-line"]
+                     ["p"     "previous-line"]
+                     ["Enter" "symbrowse-visit"]
+                     ["Tab"   "other-window"]
+                     ["g"     "symbrowse-refresh"]
+                     ["q"     "symbrowse-quit"]]
+   "apropos"        [["Enter" "apropos-visit"]
+                     ["g"     "apropos"]
+                     ["q"     "apropos-quit"]]})
 
 ;; Export keybindings as EDN vector-of-vectors for C to parse.
 ;; Format: [["global" key-code modifiers "command"] ...]
