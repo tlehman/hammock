@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hammock Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #0f1b2d;
+    --navy-mid: #162440;
+    --navy-light: #1e3258;
+    --green: #4a9e4a;
+    --green-dim: #3a7d3a;
+    --green-bright: #6abf6a;
+    --blue: #6b9fd4;
+    --blue-light: #8bb8e8;
+    --cream: #d4d8c8;
+    --white: #e8ecf0;
+    --white-dim: #9aa4b0;
+    --clojure-green: #91dc47;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--navy);
+    color: var(--white);
+    font-family: 'Source Serif 4', Georgia, serif;
+    overflow-x: hidden;
+  }
+
+  /* Subtle grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(74, 158, 74, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(74, 158, 74, 0.03) 1px, transparent 1px);
+    background-size: 24px 24px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 0 2rem;
+  }
+
+  /* ---- HERO ---- */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 4rem 2rem;
+  }
+
+  .logo-wrapper {
+    position: relative;
+    margin-bottom: 3rem;
+  }
+
+  .logo-wrapper::before {
+    content: '';
+    position: absolute;
+    inset: -30px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(74, 158, 74, 0.15) 0%, transparent 70%);
+    animation: glow 4s ease-in-out infinite alternate;
+  }
+
+  @keyframes glow {
+    from { opacity: 0.5; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1.05); }
+  }
+
+  .logo {
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+    position: relative;
+    z-index: 1;
+    filter: drop-shadow(0 0 40px rgba(74, 158, 74, 0.2));
+  }
+
+  h1 {
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: clamp(3rem, 8vw, 5.5rem);
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+    margin-bottom: 1.5rem;
+    color: var(--white);
+  }
+
+  h1 span {
+    color: var(--green-bright);
+  }
+
+  .tagline {
+    font-size: 1.25rem;
+    color: var(--white-dim);
+    max-width: 520px;
+    line-height: 1.7;
+  }
+
+  .tagline a {
+    color: var(--blue-light);
+    text-decoration: underline;
+    text-decoration-color: rgba(139, 184, 232, 0.3);
+    text-underline-offset: 3px;
+    transition: text-decoration-color 0.2s;
+  }
+
+  .tagline a:hover {
+    text-decoration-color: var(--blue-light);
+  }
+
+  .scroll-hint {
+    margin-top: 4rem;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--green-dim);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    animation: bob 2s ease-in-out infinite;
+  }
+
+  @keyframes bob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(6px); }
+  }
+
+  /* ---- SECTIONS ---- */
+  section {
+    padding: 6rem 0;
+  }
+
+  section + section {
+    border-top: 1px solid rgba(74, 158, 74, 0.1);
+  }
+
+  h2 {
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 2.2rem;
+    font-weight: 400;
+    margin-bottom: 2rem;
+    color: var(--green-bright);
+  }
+
+  p, li {
+    font-size: 1.1rem;
+    line-height: 1.8;
+    color: var(--cream);
+  }
+
+  p + p {
+    margin-top: 1.2rem;
+  }
+
+  /* ---- ARCHITECTURE DIAGRAM ---- */
+  .arch-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-top: 2.5rem;
+  }
+
+  @media (max-width: 640px) {
+    .arch-grid { grid-template-columns: 1fr; }
+  }
+
+  .arch-card {
+    background: linear-gradient(135deg, var(--navy-mid), var(--navy-light));
+    border: 1px solid rgba(74, 158, 74, 0.15);
+    border-radius: 8px;
+    padding: 1.8rem;
+    transition: border-color 0.3s, transform 0.3s;
+  }
+
+  .arch-card:hover {
+    border-color: rgba(74, 158, 74, 0.4);
+    transform: translateY(-2px);
+  }
+
+  .arch-card h3 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--green);
+    margin-bottom: 0.75rem;
+  }
+
+  .arch-card p {
+    font-size: 0.95rem;
+    line-height: 1.65;
+    color: var(--white-dim);
+  }
+
+  .arch-card code {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--blue-light);
+    background: rgba(107, 159, 212, 0.1);
+    padding: 0.15em 0.4em;
+    border-radius: 3px;
+  }
+
+  /* ---- CODE BLOCK ---- */
+  .code-block {
+    background: var(--navy-mid);
+    border: 1px solid rgba(74, 158, 74, 0.12);
+    border-radius: 8px;
+    padding: 1.5rem 2rem;
+    margin-top: 2rem;
+    overflow-x: auto;
+    position: relative;
+  }
+
+  .code-block::before {
+    content: attr(data-lang);
+    position: absolute;
+    top: 0.6rem;
+    right: 1rem;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--green-dim);
+  }
+
+  .code-block pre {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.9rem;
+    line-height: 1.7;
+    color: var(--cream);
+  }
+
+  .code-block .kw { color: var(--green-bright); }
+  .code-block .fn { color: var(--blue-light); }
+  .code-block .str { color: #e8a86d; }
+  .code-block .cm { color: #5a6a7a; }
+  .code-block .num { color: #c9a0dc; }
+
+  /* ---- FLOW SECTION ---- */
+  .flow {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin-top: 2.5rem;
+  }
+
+  .flow-step {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+    position: relative;
+  }
+
+  .flow-num {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid var(--green);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--green-bright);
+    background: var(--navy);
+    position: relative;
+    z-index: 1;
+  }
+
+  .flow-step:not(:last-child) .flow-num::after {
+    content: '';
+    position: absolute;
+    top: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2px;
+    height: calc(100% + 1rem);
+    background: linear-gradient(to bottom, var(--green-dim), transparent);
+  }
+
+  .flow-body {
+    padding: 0.3rem 0 2.5rem 0;
+  }
+
+  .flow-body h3 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--white);
+    margin-bottom: 0.4rem;
+  }
+
+  .flow-body p {
+    font-size: 0.95rem;
+    color: var(--white-dim);
+  }
+
+  /* ---- FEATURES LIST ---- */
+  .features {
+    list-style: none;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem 2rem;
+    margin-top: 1.5rem;
+  }
+
+  @media (max-width: 640px) {
+    .features { grid-template-columns: 1fr; }
+  }
+
+  .features li {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--cream);
+    padding-left: 1.4rem;
+    position: relative;
+    line-height: 1.6;
+  }
+
+  .features li::before {
+    content: '\276F';
+    position: absolute;
+    left: 0;
+    color: var(--green);
+    font-weight: 600;
+  }
+
+  /* ---- BUILD SECTION ---- */
+  .build-steps {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .build-chip {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.85rem;
+    background: var(--navy-mid);
+    border: 1px solid rgba(74, 158, 74, 0.2);
+    padding: 0.6rem 1.2rem;
+    border-radius: 6px;
+    color: var(--cream);
+    white-space: nowrap;
+  }
+
+  .build-chip .prompt {
+    color: var(--green);
+    margin-right: 0.3rem;
+  }
+
+  /* ---- AUTHOR ---- */
+  .author {
+    text-align: center;
+    padding: 4rem 0 6rem;
+  }
+
+  .author p {
+    color: var(--white-dim);
+    font-size: 1rem;
+  }
+
+  .author a {
+    color: var(--blue-light);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(139, 184, 232, 0.3);
+    transition: border-color 0.2s;
+  }
+
+  .author a:hover {
+    border-color: var(--blue-light);
+  }
+
+  .author .separator {
+    display: inline-block;
+    width: 40px;
+    height: 2px;
+    background: var(--green-dim);
+    margin: 2rem auto;
+    border-radius: 1px;
+  }
+
+  /* ---- ANIMATIONS ---- */
+  .fade-in {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+
+  .fade-in.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="logo-wrapper">
+    <img src="logo.png" alt="Hammock Editor logo: SCI in a hammock between two trees" class="logo">
+  </div>
+  <h1><span>Hammock</span> Editor</h1>
+  <p class="tagline">
+    A terminal text editor for deep thinking. Inspired by Rich Hickey's
+    <a href="https://www.youtube.com/watch?v=f84n5oFoZBc&t=53">Hammock Driven Development</a>.
+    Minimal C kernel. Clojure scripting. Markdown-native.
+  </p>
+  <div class="scroll-hint">scroll to explore</div>
+</div>
+
+<div class="container">
+
+  <section class="fade-in">
+    <h2>What It Is</h2>
+    <p>
+      Hammock is a Clojure-oriented terminal editor inspired by Emacs, but it's not Emacs.
+      It's built for people who think in Clojure and write in GitHub-flavored Markdown.
+    </p>
+    <p>
+      The <em>scratch</em> buffer runs Clojure, evaluated by
+      <a href="https://github.com/babashka/sci" style="color: var(--blue-light);">SCI</a>
+      (Small Clojure Interpreter) compiled as a native shared library via GraalVM.
+      You can modify editor behavior live with <code style="font-family: 'IBM Plex Mono', monospace; color: var(--green-bright); background: rgba(74,158,74,0.1); padding: 0.15em 0.4em; border-radius: 3px;">C-j</code>.
+    </p>
+  </section>
+
+  <section class="fade-in">
+    <h2>Architecture</h2>
+    <p>
+      Two layers: a functional core in Clojure and an imperative shell in C.
+      Commands return effect vectors describing what C should do, rather than doing it directly.
+    </p>
+
+    <div class="arch-grid">
+      <div class="arch-card">
+        <h3>C Kernel: src/</h3>
+        <p>
+          Performance-critical primitives: <code>ncurses</code> display,
+          gap buffer text storage, key input, in-process SCI calls, and cursor movement.
+        </p>
+      </div>
+      <div class="arch-card">
+        <h3>Clojure Layer: clj/</h3>
+        <p>
+          Everything else: commands, keybindings, modes, editor state via atoms,
+          git integration, markdown navigation, and buffer management.
+        </p>
+      </div>
+      <div class="arch-card">
+        <h3>Effect Vectors</h3>
+        <p>
+          Clojure commands return data like <code>[:message "saved"]</code> or
+          <code>[:point-forward 1]</code>. C interprets and executes them.
+        </p>
+      </div>
+      <div class="arch-card">
+        <h3>Live Reload</h3>
+        <p>
+          Atom watches on keybindings, commands, and modes propagate changes instantly.
+          <code>swap!</code> takes effect on the next loop iteration.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="fade-in">
+    <h2>How It Works</h2>
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-num">1</div>
+        <div class="flow-body">
+          <h3>Initialize the C kernel</h3>
+          <p>ncurses terminal, input handling, gap buffers</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">2</div>
+        <div class="flow-body">
+          <h3>Load Clojure modules via SCI</h3>
+          <p>In-process evaluation of <code style="font-family: 'IBM Plex Mono', monospace; color: var(--blue-light);">clj/*.clj</code> through <a href="https://github.com/babashka/sci" style="color: var(--blue-light);">libsci</a></p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">3</div>
+        <div class="flow-body">
+          <h3>Fetch keybinding and mode tables</h3>
+          <p>Clojure exports EDN, C parses it into its keymap</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">4</div>
+        <div class="flow-body">
+          <h3>Enter the main loop</h3>
+          <p>Each keystroke dispatches through the keymap. Hot-path commands run in C for zero latency. Everything else round-trips through Clojure.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="fade-in">
+    <h2>Commands in Clojure</h2>
+    <p>All editor commands are defined in Clojure using <code style="font-family: 'IBM Plex Mono', monospace; color: var(--green-bright); background: rgba(74,158,74,0.1); padding: 0.15em 0.4em; border-radius: 3px;">defcommand</code> and return effect vectors:</p>
+
+    <div class="code-block" data-lang="clojure">
+<pre><span class="cm">;; clj/commands.clj</span>
+(<span class="kw">defcommand</span> <span class="str">"save-buffer"</span>
+  <span class="str">"Save the current buffer to disk"</span>
+  (<span class="kw">fn</span> []
+    [(<span class="fn">fx/save-buffer</span>)
+     (<span class="fn">fx/message</span> <span class="str">"Buffer saved."</span>)]))
+
+(<span class="kw">defcommand</span> <span class="str">"git-status"</span>
+  <span class="str">"Show git status in a buffer"</span>
+  (<span class="kw">fn</span> []
+    (<span class="kw">let</span> [status (<span class="fn">git/status</span>)]
+      [(<span class="fn">fx/switch-to-buffer</span> <span class="str">"*git-status*"</span>)
+       (<span class="fn">fx/insert</span> status)])))</pre>
+    </div>
+  </section>
+
+  <section class="fade-in">
+    <h2>Features</h2>
+    <ul class="features">
+      <li>Gap buffer text storage</li>
+      <li>Clojure scripting via SCI</li>
+      <li>GitHub-flavored Markdown mode</li>
+      <li>Git integration (status, diff, commit, log)</li>
+      <li>Incremental search</li>
+      <li>Window splitting</li>
+      <li>Live Clojure evaluation with C-j</li>
+      <li>Buffer list management</li>
+      <li>Syntax highlighting (C, Clojure, Bash, Markdown)</li>
+      <li>Emacs-style keybindings</li>
+      <li>PTY-based shell in a buffer</li>
+      <li>Claude Code integration</li>
+      <li>Help system (describe-key, describe-function, apropos)</li>
+      <li>Hot-reloadable configuration</li>
+    </ul>
+  </section>
+
+  <section class="fade-in">
+    <h2>Build</h2>
+    <p>Requires a C11 compiler, ncurses, and GraalVM CE with native-image (provided by the Nix flake).</p>
+    <div class="build-steps">
+      <div class="build-chip"><span class="prompt">$</span> nix develop</div>
+      <div class="build-chip"><span class="prompt">$</span> make -C libsci</div>
+      <div class="build-chip"><span class="prompt">$</span> make</div>
+    </div>
+  </section>
+
+  <div class="author fade-in">
+    <div class="separator"></div>
+    <p>
+      Built by <a href="https://github.com/tlehman">Tobi Lehman</a>
+    </p>
+  </div>
+
+</div>
+
+<script>
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.15 });
+
+  document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+</script>
+
+</body>
+</html>
