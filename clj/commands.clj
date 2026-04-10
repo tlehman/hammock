@@ -555,6 +555,51 @@
      [:window-delete-others]
      [:buffer-switch "*scratch*"]]))
 
+;; ---- Apropos ----
+
+(defn- apropos-layout-effects [pattern]
+  (let [text (symbols/format-apropos pattern)]
+    [[:buffer-create "*Apropos*"]
+     [:window-split-below]
+     [:window-other]
+     [:buffer-switch "*Apropos*"]
+     [:buffer-set-read-only false]
+     [:buffer-set-contents text]
+     [:point-to-buffer-start]
+     [:buffer-set-modified false]
+     [:buffer-set-read-only true]
+     [:buffer-set-mode "Apropos"]]))
+
+(defcommand "apropos"
+  "Prompt for a pattern and list matching symbols."
+  (fn []
+    [[:prompt "Apropos: " "hammock.commands/apropos-cb" :none]]))
+
+(defn apropos-cb [pattern]
+  (symbols/ensure!)
+  (apropos-layout-effects pattern))
+
+(defcommand "apropos-visit"
+  "Jump to the definition of the symbol at point in the apropos buffer."
+  (fn []
+    (let [line (fx/current-line)
+          nm (symbols/apropos-name-at-line line)]
+      (if (str/blank? nm)
+        [[:message "No symbol at point"]]
+        (let [idx (symbols/ensure!)
+              hit (or (symbols/find-command nm)
+                      (first (filter #(= nm (:name %))
+                                     (mapcat val (:namespaces idx))))
+                      (first (filter #(= nm (:name %))
+                                     (mapcat val (:modules idx)))))]
+          (if hit
+            (into [[:buffer-destroy "*Apropos*"]] (visit-symbol-effects hit))
+            [[:message (str "Symbol not in index: " nm)]]))))))
+
+(defcommand "apropos-quit"
+  "Close the apropos window."
+  (fn [] [[:buffer-destroy "*Apropos*"] [:window-delete]]))
+
 ;; ---- Version ----
 
 (defcommand "version" "Show the Hammock version in the minibuffer."
