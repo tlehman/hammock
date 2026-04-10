@@ -276,6 +276,7 @@ int main(int argc, char *argv[]) {
         free(sci_load_file("clj/core.clj"));
         free(sci_load_file("clj/git.clj"));
         free(sci_load_file("clj/markdown.clj"));
+        free(sci_load_file("clj/symbols.clj"));
         free(sci_load_file("clj/commands.clj"));
         free(sci_load_file("clj/keybindings.clj"));
         free(sci_load_file("clj/modes.clj"));
