@@ -169,7 +169,8 @@
    ["f" "describe-function"]
    ["n" "view-news"]
    ["s" "browse-symbols"]
-   ["a" "apropos"]])
+   ["a" "apropos"]
+   ["e" "view-messages"]])
 
 ;; Mode-specific keybindings
 (def mode-bindings

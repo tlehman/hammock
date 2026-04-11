@@ -2,7 +2,7 @@
   (:require [hammock.state :as state]
             [hammock.effects :as fx]))
 
-(defn hammock-version [] "0.1.3")
+(defn hammock-version [] "0.2.0")
 
 ;; Backward compat: alias the old atom name
 (defonce *editor-state* state/*editor*)

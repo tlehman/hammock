@@ -6,7 +6,6 @@
 #include "command.h"
 #include "sci.h"
 #include "mode.h"
-#include "markdown.h"
 #include "shell.h"
 #include "git.h"
 #include "news.h"
@@ -254,13 +253,22 @@ static int run_headless_eval(const char *expr) {
         fprintf(stderr, "hammock: could not initialize SCI interpreter\n");
         return 1;
     }
-    const char *files[] = {
-        "clj/state.clj", "clj/effects.clj", "clj/core.clj",
-        "clj/git.clj", "clj/markdown.clj", "clj/symbols.clj",
-        "clj/commands.clj", "clj/keybindings.clj", "clj/modes.clj",
-    };
-    for (size_t i = 0; i < sizeof(files) / sizeof(files[0]); i++) {
-        free(sci_load_file(files[i]));
+    /* Load via the loadup.clj manifest (same as main()). */
+    free(sci_load_file("clj/loadup.clj"));
+    char *files_edn = sci_eval("hammock.loadup/files");
+    if (files_edn) {
+        size_t consumed = 0;
+        EdnVal *root = edn_parse(files_edn, strlen(files_edn), &consumed);
+        if (root && root->type == EDN_VECTOR) {
+            for (int i = 0; i < root->vec.count; i++) {
+                EdnVal *item = root->vec.items[i];
+                if (item && item->type == EDN_STRING && item->str) {
+                    free(sci_load_file(item->str));
+                }
+            }
+        }
+        edn_free(root);
+        free(files_edn);
     }
     char *result = sci_eval(expr);
     if (result) {
@@ -316,6 +324,9 @@ int main(int argc, char *argv[]) {
     display_init();
     input_init();
 
+    /* Create *Messages* buffer before SCI so early errors land in it. */
+    messages_buffer = buffer_create("*Messages*");
+
     /* Set up signal handler for terminal resize */
     struct sigaction sa;
     sa.sa_handler = handle_sigwinch;
@@ -326,16 +337,26 @@ int main(int argc, char *argv[]) {
     /* Initialize SCI and load scripting layer */
     bool clj_ok = sci_init();
     if (clj_ok) {
-        /* Load Clojure modules in dependency order */
-        free(sci_load_file("clj/state.clj"));
-        free(sci_load_file("clj/effects.clj"));
-        free(sci_load_file("clj/core.clj"));
-        free(sci_load_file("clj/git.clj"));
-        free(sci_load_file("clj/markdown.clj"));
-        free(sci_load_file("clj/symbols.clj"));
-        free(sci_load_file("clj/commands.clj"));
-        free(sci_load_file("clj/keybindings.clj"));
-        free(sci_load_file("clj/modes.clj"));
+        /* Load the Clojure layer via the manifest in clj/loadup.clj.
+         * loadup.clj owns the load order as data; C reads it back and
+         * calls sci_load_file on each entry. Mirrors Emacs's loadup.el
+         * pattern: the file list lives in the Lisp layer, not in C. */
+        free(sci_load_file("clj/loadup.clj"));
+        char *files_edn = sci_eval("hammock.loadup/files");
+        if (files_edn) {
+            size_t consumed = 0;
+            EdnVal *root = edn_parse(files_edn, strlen(files_edn), &consumed);
+            if (root && root->type == EDN_VECTOR) {
+                for (int i = 0; i < root->vec.count; i++) {
+                    EdnVal *item = root->vec.items[i];
+                    if (item && item->type == EDN_STRING && item->str) {
+                        free(sci_load_file(item->str));
+                    }
+                }
+            }
+            edn_free(root);
+            free(files_edn);
+        }
 
         /* Load keybindings from Clojure */
         char *kb_edn = sci_eval("(hammock.keybindings/export)");

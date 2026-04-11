@@ -48,6 +48,12 @@ int complete_command_name(const char *input, const char **candidates, int max_ca
 extern char minibuf_message[256];
 void message(const char *fmt, ...);
 
+/* *Messages* buffer: append-only log of every call to message().
+ * Set by main() after buffer subsystem is ready. NULL until then. */
+struct Buffer;
+extern struct Buffer *messages_buffer;
+#define MESSAGES_CAP 1000
+
 /* Global editor state */
 extern bool editor_running;
 extern bool need_redisplay;

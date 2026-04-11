@@ -41,6 +41,7 @@
 
 ;; Buffer management
 (defn buffer-create [name]         [:buffer-create name])
+(defn buffer-append-text [name text] [:buffer-append-text name text])
 (defn buffer-switch [name]         [:buffer-switch name])
 (defn buffer-load-file [path]      [:buffer-load-file path])
 (defn buffer-save []               [:buffer-save])

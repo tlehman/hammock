@@ -405,6 +405,28 @@ static int execute_one_effect(EdnVal *effect) {
         const char *name = edn_string_val(effect->vec.items[1]);
         if (name) buffer_create(name);
     }
+    else if (strcmp(op, "buffer-append-text") == 0) {
+        const char *name = edn_string_val(effect->vec.items[1]);
+        const char *text = edn_string_val(effect->vec.items[2]);
+        if (name && text) {
+            Buffer *target = buffer_find(name);
+            if (target) {
+                if (target == messages_buffer ||
+                    strcmp(name, "*Messages*") == 0) {
+                    buffer_append_line_capped(target, text, MESSAGES_CAP);
+                } else {
+                    size_t saved = target->point;
+                    bool inhibit = target->undo_inhibit;
+                    target->undo_inhibit = true;
+                    target->point = buffer_length(target);
+                    buffer_insert_string(target, text, strlen(text));
+                    target->undo_inhibit = inhibit;
+                    size_t new_len = buffer_length(target);
+                    target->point = saved <= new_len ? saved : new_len;
+                }
+            }
+        }
+    }
     else if (strcmp(op, "buffer-switch") == 0) {
         const char *name = edn_string_val(effect->vec.items[1]);
         if (name) {

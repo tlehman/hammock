@@ -71,20 +71,26 @@ int main(void) {
         return 1;
     }
 
-    puts("Loading Clojure namespaces...");
-    const char *files[] = {
-        "clj/state.clj",
-        "clj/effects.clj",
-        "clj/core.clj",
-        "clj/git.clj",
-        "clj/markdown.clj",
-        "clj/symbols.clj",
-        "clj/commands.clj",
-        "clj/keybindings.clj",
-        "clj/modes.clj",
-        NULL
-    };
-    for (int i = 0; files[i]; i++) load_file(files[i]);
+    puts("Loading Clojure namespaces via clj/loadup.clj manifest...");
+    load_file("clj/loadup.clj");
+
+    /* Read the file list back from the manifest and load each entry. */
+    char *count_raw = libsci_eval_string(thread, "(count hammock.loadup/files)");
+    int count = count_raw ? atoi(count_raw) : 0;
+    for (int i = 0; i < count; i++) {
+        char expr[64];
+        snprintf(expr, sizeof(expr), "(nth hammock.loadup/files %d)", i);
+        char *path_raw = libsci_eval_string(thread, expr);
+        if (!path_raw) continue;
+        /* SCI serializes string values with surrounding quotes. Strip them. */
+        size_t plen = strlen(path_raw);
+        if (plen >= 2 && path_raw[0] == '"' && path_raw[plen - 1] == '"') {
+            path_raw[plen - 1] = '\0';
+            load_file(path_raw + 1);
+        } else {
+            load_file(path_raw);
+        }
+    }
 
     puts("\nSymbol index probes...");
     expect_true("symbols/ensure! returns a map",
@@ -121,6 +127,18 @@ int main(void) {
                 "(boolean (some #(and (= \"ch\" (first %)) (= \"browse-symbols\" (last %))) (hammock.keybindings/export)))");
     expect_true("F1 s binding exported",
                 "(boolean (some #(and (= \"f1\" (first %)) (= \"browse-symbols\" (last %))) (hammock.keybindings/export)))");
+    expect_true("C-h e binding exported",
+                "(boolean (some #(and (= \"ch\" (first %)) (= \"view-messages\" (last %))) (hammock.keybindings/export)))");
+
+    puts("\n*Messages* plumbing...");
+    expect_true("view-messages registered",
+                "(contains? @hammock.state/*commands* \"view-messages\")");
+    expect_true("clear-messages registered",
+                "(contains? @hammock.state/*commands* \"clear-messages\")");
+    expect_true("view-messages dispatch emits buffer-switch",
+                "(= :buffer-switch (first (first (hammock.commands/dispatch \"view-messages\"))))");
+    expect_true("dispatch catches throwing command",
+                "(do (swap! hammock.state/*commands* assoc \"__smoke-throw__\" {:fn (fn [] (throw (ex-info \"boom\" {})))}) (let [r (hammock.commands/dispatch \"__smoke-throw__\")] (and (vector? r) (= :message (first (first r))))))");
 
     libsci_shutdown(thread);
     graal_tear_down_isolate(thread);

@@ -406,3 +406,30 @@ Buffer *buffer_find_file(const char *path) {
 void buffer_switch(Buffer *buf) {
     current_buffer = buf;
 }
+
+void buffer_append_line_capped(Buffer *buf, const char *text, size_t max_lines) {
+    if (!buf || !text) return;
+
+    size_t saved_point = buf->point;
+    bool saved_inhibit = buf->undo_inhibit;
+    buf->undo_inhibit = true;
+
+    buf->point = buffer_length(buf);
+    size_t text_len = strlen(text);
+    if (text_len > 0) buffer_insert_string(buf, text, text_len);
+    if (text_len == 0 || text[text_len - 1] != '\n')
+        buffer_insert_char(buf, '\n');
+
+    /* Evict oldest lines until count <= max_lines + 1 (trailing empty line). */
+    while (buffer_line_count(buf) > max_lines + 1) {
+        size_t first_end = buffer_line_end(buf, 0);
+        if (first_end < buffer_length(buf)) first_end++; /* include newline */
+        if (first_end == 0) break;
+        buffer_delete_region(buf, 0, first_end);
+    }
+
+    buf->undo_inhibit = saved_inhibit;
+    size_t new_len = buffer_length(buf);
+    buf->point = saved_point <= new_len ? saved_point : new_len;
+    buf->modified = false;
+}

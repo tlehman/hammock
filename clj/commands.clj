@@ -14,12 +14,17 @@
    (swap! state/*commands* assoc name {:fn f :doc docstring})))
 
 ;; Dispatch a command by name, return effect vector.
-;; nREPL's value serialization produces the EDN string for C.
+;; Any exception thrown by the command body is caught and converted to a
+;; [:message ...] effect so the error surfaces in the echo area and the
+;; *Messages* buffer instead of being lost.
 (defn dispatch [name]
   (let [entry (get @state/*commands* name)
         f (if (map? entry) (:fn entry) entry)]
     (if f
-      (f)
+      (try
+        (f)
+        (catch Exception e
+          [[:message (str "ERROR in " name ": " e)]]))
       [[:message (str "Unknown Clojure command: " name)]])))
 
 ;; Export command metadata as [[name docstring] ...] vector for C registration
@@ -152,6 +157,16 @@
                           :else \space)
                         name size (or mode "") (or filename "")))]
     (str header sep (apply str lines))))
+
+(defcommand "view-messages" "Switch to the *Messages* buffer."
+  (fn [] [[:buffer-switch "*Messages*"]
+          [:point-to-buffer-end]]))
+
+(defcommand "clear-messages" "Erase the contents of the *Messages* buffer."
+  (fn [] [[:buffer-switch "*Messages*"]
+          [:buffer-set-read-only false]
+          [:buffer-set-contents ""]
+          [:buffer-set-modified false]]))
 
 (defcommand "list-buffers" "Display a list of all buffers."
   (fn []

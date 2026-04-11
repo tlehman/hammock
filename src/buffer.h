@@ -75,4 +75,9 @@ Buffer *buffer_find(const char *name);
 Buffer *buffer_find_file(const char *path);
 void buffer_switch(Buffer *buf);
 
+/* Append `text` at end of `buf`, ensure trailing newline, then evict
+ * oldest lines until line count <= max_lines. Does not record undo.
+ * Safe to call with a NULL buf (no-op). */
+void buffer_append_line_capped(Buffer *buf, const char *text, size_t max_lines);
+
 #endif

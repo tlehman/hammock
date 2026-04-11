@@ -1,5 +1,37 @@
 # Hammock NEWS -- history of user-visible changes.
 
+## Version 0.2.0 (2026-04-11)
+
+### *Messages* buffer
+
+- New `*Messages*` buffer captures every call to `message()` (both from C
+  and from the Clojure `[:message ...]` effect). It is a real gap-buffer
+  backed buffer: switch to it, scroll, search, run commands, just like any
+  other buffer. Capped at 1000 lines with FIFO eviction of the oldest
+  entries.
+- New command `view-messages` (bound to `C-h e`, mirroring Emacs) switches
+  to `*Messages*`. `clear-messages` erases it.
+- `hammock.commands/dispatch` now wraps every Clojure command body in
+  `try/catch`. Exceptions are converted to a `[:message]` effect so they
+  surface in the echo area and in `*Messages*` instead of silently
+  vanishing when `sci_eval` returns non-EDN error text. This fixes a
+  long-standing debugging gap where Clojure errors during live reload
+  simply disappeared.
+
+### Bootstrap
+
+- New `clj/loadup.clj` exports the load order as data (`hammock.loadup/files`).
+  `main.c` reads the vector back and calls `sci_load_file` on each entry,
+  mirroring Emacs's `lisp/loadup.el` pattern. Adding a new Clojure file is
+  now a pure Clojure change: add it to the vector in one place. The old
+  hardcoded list in `main.c` and `test/smoke.c` is gone.
+
+### Cleanup
+
+- Removed dead `src/markdown.c` / `src/markdown.h`: `markdown_link_at_point`
+  and `markdown_link_free` had no callers; the live link-at-point logic
+  moved to `clj/markdown.clj` in an earlier release.
+
 ## Version 0.1.3 (2026-04-10)
 
 ### Command line

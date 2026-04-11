@@ -17,6 +17,7 @@
 CommandEntry command_table[MAX_COMMANDS];
 int command_count = 0;
 char minibuf_message[256] = "";
+Buffer *messages_buffer = NULL;
 bool editor_running = true;
 bool need_redisplay = true;
 
@@ -101,6 +102,8 @@ void message(const char *fmt, ...) {
     va_start(ap, fmt);
     vsnprintf(minibuf_message, sizeof(minibuf_message), fmt, ap);
     va_end(ap);
+    if (messages_buffer && minibuf_message[0] != '\0')
+        buffer_append_line_capped(messages_buffer, minibuf_message, MESSAGES_CAP);
     need_redisplay = true;
 }
 
@@ -790,7 +793,8 @@ static void cmd_eval_last_sexp(void) {
             scratch = buffer_create("*scratch*");
             buffer_set_mode(scratch, MODE_CLOJURE);
         }
-        scratch->point = buffer_length(scratch);
+        //TODO try inserting at point (leave commented)
+        //scratch->point = buffer_length(scratch);
         char *insertion = hmalloc(strlen(result) + 8);
         sprintf(insertion, "\n; => %s", result);
         buffer_insert_string(scratch, insertion, strlen(insertion));

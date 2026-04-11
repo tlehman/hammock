@@ -44,7 +44,7 @@ Users can modify editor behavior live via `C-j` in the scratch buffer.
 ## TODO 
 - [x] bug: C-j on `(println ...)` throws error
 - [x] bug: Shift-Tab should go backward on welcome screen
-- [ ] feature: *Messages* buffer for errors
+- [x] feature: *Messages* buffer for errors
 - [x] feature: add a namespace/symbol explorer, so you can navigate through all the namespaces and symbols and finally jump to definition
 - [ ] feature: git mode view git log
 - [ ] feature: in markdown mode, tables are displayed with padding and look rectangular (like org-mode)
