@@ -44,7 +44,6 @@ Users can modify editor behavior live via `C-j` in the scratch buffer.
 ## TODO 
 - [x] bug: C-j on `(println ...)` throws error
 - [x] bug: Shift-Tab should go backward on welcome screen
-- [ ] feature: 
 - [ ] feature: *Messages* buffer for errors
 - [x] feature: add a namespace/symbol explorer, so you can navigate through all the namespaces and symbols and finally jump to definition
 - [ ] feature: git mode view git log
@@ -67,27 +66,3 @@ Users can modify editor behavior live via `C-j` in the scratch buffer.
 
 ## Dependencies
 - [libsci](https://github.com/babashka/sci) Configurable Clojure/Script interpreter suitable for scripting and Clojure DSLs
-
-
-
-
-# TIVS
-## Values
-2, 3, "abc", (fn [x y] [y x])
-
-## Identity
-An identity is a sequence of values in time
-
-(def *editor* (atom {}))
-(swap! *editor assoc :a 2)
-
-## State 
-The state of an identity is the value at a point in time.
-
-## Time 
-
-Demis Hassabis - Deep Mind
-Eternalism - Einstein
-Presentism - Feyman
-
-$ax^2 + b_2x + c = 0$
