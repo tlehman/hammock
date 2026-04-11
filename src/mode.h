@@ -18,6 +18,9 @@ typedef enum {
     MODE_DIFF,
     MODE_GREP,
     MODE_HELP,
+    MODE_SYMBOL_BROWSER,
+    MODE_SYMBOL_DETAIL,
+    MODE_APROPOS,
     MODE_COUNT,
 } MajorModeID;
 

@@ -15,6 +15,8 @@ import clojure.lang.Var;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 
 /**
  * C-callable entry points for the SCI (Small Clojure Interpreter).
@@ -46,6 +48,16 @@ public class SciLib {
 
     /** SCI evaluation context (created at runtime) */
     private static Object sciCtx;
+
+    /**
+     * Captures everything SCI code writes to *out* (via println, print, etc.).
+     * Bound into clojure.core/*out* at context init, then drained by
+     * sciEvalString after each eval so the output gets returned alongside
+     * the result. Without this, println throws because SCI's *out* is
+     * unbound and can't be cast to java.io.Writer.
+     */
+    private static StringWriter captureBuffer;
+    private static PrintWriter captureOut;
 
     /**
      * Shell exec function exposed to SCI as hammock.shell/exec.
@@ -89,16 +101,27 @@ public class SciLib {
     @CEntryPoint(name = "libsci_init")
     public static int sciInit(IsolateThread thread) {
         try {
-            // Build namespace map with hammock.shell/exec
+            // Allocate the capture buffer that will back SCI's *out*.
+            // Referencing StringWriter/PrintWriter here also forces
+            // GraalVM native-image static analysis to include them.
+            captureBuffer = new StringWriter();
+            captureOut = new PrintWriter(captureBuffer, true);
+
             Object shellNs = RT.map(
                 Symbol.intern("exec"), SHELL_EXEC
+            );
+            // Expose the capture writer as a bound var so Clojure code
+            // can rebind *out* to it via alter-var-root below.
+            Object hammockIoNs = RT.map(
+                Symbol.intern("capture-out"), captureOut
             );
 
             sciCtx = SCI_INIT.invoke(
                 RT.map(
                     Keyword.intern("namespaces"),
                     RT.map(
-                        Symbol.intern("hammock.shell"), shellNs
+                        Symbol.intern("hammock.shell"), shellNs,
+                        Symbol.intern("hammock.io"), hammockIoNs
                     )
                 )
             );
@@ -114,12 +137,61 @@ public class SciLib {
     public static CCharPointer sciEvalString(IsolateThread thread, CCharPointer code) {
         try {
             String codeStr = CTypeConversion.toJavaString(code);
-            Object result = SCI_EVAL_STRING.invoke(sciCtx, codeStr);
-            if (result == null) {
-                return CTypeConversion.toCString("nil").get();
+
+            // Drain any output from a previous eval.
+            if (captureBuffer != null) {
+                captureOut.flush();
+                captureBuffer.getBuffer().setLength(0);
             }
-            String resultStr = PR_STR.invoke(result).toString();
-            return CTypeConversion.toCString(resultStr).get();
+
+            // Wrap user code in a binding form that rebinds *out* / *err*
+            // to our capture writer. SCI's built-in *out* is read-only at
+            // the root, but dynamic binding via (binding ...) is allowed
+            // and gives println/print a valid Writer to cast to.
+            //
+            // Skip wrapping for file loads: those contain top-level (ns ...)
+            // forms whose alias/require side-effects only fire when ns is
+            // evaluated at top level, not nested inside (do ...). We detect
+            // them by the leading `(ns` token.
+            String trimmed = codeStr;
+            int start = 0;
+            while (start < trimmed.length() &&
+                   Character.isWhitespace(trimmed.charAt(start))) {
+                start++;
+            }
+            boolean isFileLoad =
+                trimmed.regionMatches(start, "(ns ", 0, 4) ||
+                trimmed.regionMatches(start, "(ns\n", 0, 4) ||
+                trimmed.regionMatches(start, "(ns\t", 0, 4);
+
+            String toEval;
+            if (isFileLoad) {
+                toEval = codeStr;
+            } else {
+                toEval = "(binding [*out* hammock.io/capture-out " +
+                         "          *err* hammock.io/capture-out] " +
+                         "  (do " + codeStr + "))";
+            }
+
+            Object result = SCI_EVAL_STRING.invoke(sciCtx, toEval);
+
+            // Collect whatever the eval printed via (println ...) etc.
+            String printed = "";
+            if (captureBuffer != null) {
+                captureOut.flush();
+                printed = captureBuffer.toString();
+                captureBuffer.getBuffer().setLength(0);
+            }
+
+            String resultStr;
+            if (result == null) {
+                resultStr = "nil";
+            } else {
+                resultStr = PR_STR.invoke(result).toString();
+            }
+
+            String combined = printed.isEmpty() ? resultStr : (printed + resultStr);
+            return CTypeConversion.toCString(combined).get();
         } catch (Exception e) {
             System.err.println("sci_eval error: " + e.getMessage());
             return CTypeConversion.toCString("nil").get();

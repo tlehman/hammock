@@ -244,6 +244,17 @@ static int execute_one_effect(EdnVal *effect) {
     else if (strcmp(op, "point-to-buffer-end") == 0) {
         buf->point = buffer_length(buf);
     }
+    else if (strcmp(op, "point-to-line") == 0) {
+        long long n = edn_int_val(effect->vec.items[1], 1);
+        if (n < 1) n = 1;
+        buf->point = 0;
+        for (long long i = 1; i < n; i++) {
+            size_t next = buffer_next_line_start(buf, buf->point);
+            if (next == buf->point) break;
+            buf->point = next;
+        }
+        win->target_col = -1;
+    }
     else if (strcmp(op, "point-forward-word") == 0) {
         buf->point = buffer_forward_word(buf, buf->point);
     }
@@ -482,6 +493,35 @@ static int execute_one_effect(EdnVal *effect) {
             current_buffer = next->buffer;
         }
     }
+    else if (strcmp(op, "display-buffer") == 0) {
+        const char *name = edn_string_val(effect->vec.items[1]);
+        if (name) {
+            Buffer *target = buffer_find(name);
+            if (!target) {
+                message("No buffer named %s", name);
+            } else {
+                /* Reuse an existing window already showing this buffer. */
+                Window *existing = NULL;
+                for (Window *w = window_list; w; w = w->next) {
+                    if (w->buffer == target) { existing = w; break; }
+                }
+                if (existing) {
+                    current_window = existing;
+                    current_buffer = target;
+                } else {
+                    Window *new_win = window_split_below(win);
+                    if (new_win) {
+                        new_win->buffer = target;
+                        current_window = new_win;
+                    } else {
+                        /* Too small to split: reuse current window. */
+                        win->buffer = target;
+                    }
+                    current_buffer = target;
+                }
+            }
+        }
+    }
 
     /* Display */
     else if (strcmp(op, "message") == 0) {
@@ -594,6 +634,12 @@ static int execute_one_effect(EdnVal *effect) {
     }
 
     /* Prompt -- collect minibuffer input and dispatch Clojure callback */
+    /* Dispatch a named command (used by hammock:// links) */
+    else if (strcmp(op, "run-command") == 0) {
+        const char *name = edn_string_val(effect->vec.items[1]);
+        if (name) command_dispatch(name, true);
+    }
+
     else if (strcmp(op, "prompt") == 0) {
         if (effect->vec.count >= 4) {
             const char *prompt_text = edn_string_val(effect->vec.items[1]);

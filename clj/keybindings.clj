@@ -15,6 +15,7 @@
 (def HK_PGDN      0x100A)
 (def HK_TAB       0x100B)
 (def HK_ENTER     0x100C)
+(def HK_SHIFT_TAB 0x100D)
 
 (def MOD_CTRL 1)
 (def MOD_META 2)
@@ -55,6 +56,7 @@
       (= spec "PgUp")      [HK_PGUP 0]
       (= spec "PgDn")      [HK_PGDN 0]
       (= spec "Tab")       [HK_TAB 0]
+      (= spec "Shift-Tab") [HK_SHIFT_TAB 0]
       (= spec "Enter")     [HK_ENTER 0]
 
       ;; Single character
@@ -158,21 +160,25 @@
 (def f1-bindings
   [["k" "describe-key"]
    ["f" "describe-function"]
-   ["n" "view-news"]])
+   ["n" "view-news"]
+   ["s" "browse-symbols"]])
 
 ;; C-h help prefix bindings (Emacs-style, mirrors F1)
 (def ch-bindings
   [["k" "describe-key"]
    ["f" "describe-function"]
-   ["n" "view-news"]])
+   ["n" "view-news"]
+   ["s" "browse-symbols"]
+   ["a" "apropos"]])
 
 ;; Mode-specific keybindings
 (def mode-bindings
-  {"markdown"   [["Enter" "markdown-follow-link"]
-                 ["Tab"   "markdown-next-link"]
-                 ["l"     "markdown-go-back"]
-                 ["n"     "markdown-next-heading"]
-                 ["p"     "markdown-prev-heading"]]
+  {"markdown"   [["Enter"     "markdown-follow-link"]
+                 ["Tab"       "markdown-next-link"]
+                 ["Shift-Tab" "markdown-prev-link"]
+                 ["l"         "markdown-go-back"]
+                 ["n"         "markdown-next-heading"]
+                 ["p"         "markdown-prev-heading"]]
    "git-status" [["s"     "git-stage"]
                  ["u"     "git-unstage"]
                  ["c"     "git-commit"]
@@ -189,7 +195,21 @@
    "buffer-list"  [["Enter" "buflist-visit"]
                    ["D"     "buflist-mark-delete"]
                    ["x"     "buflist-execute"]
-                   ["q"     "buflist-quit"]]})
+                   ["q"     "buflist-quit"]]
+   "symbol-browser" [["n"     "next-line"]
+                     ["p"     "previous-line"]
+                     ["Enter" "symbrowse-select"]
+                     ["g"     "symbrowse-refresh"]
+                     ["q"     "symbrowse-quit"]]
+   "symbol-detail"  [["n"     "next-line"]
+                     ["p"     "previous-line"]
+                     ["Enter" "symbrowse-visit"]
+                     ["Tab"   "other-window"]
+                     ["g"     "symbrowse-refresh"]
+                     ["q"     "symbrowse-quit"]]
+   "apropos"        [["Enter" "apropos-visit"]
+                     ["g"     "apropos"]
+                     ["q"     "apropos-quit"]]})
 
 ;; Export keybindings as EDN vector-of-vectors for C to parse.
 ;; Format: [["global" key-code modifiers "command"] ...]

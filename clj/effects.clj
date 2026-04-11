@@ -78,6 +78,9 @@
 (defn reset-target-col []          [:reset-target-col])
 (defn preserve-target-col []       [:preserve-target-col])
 
+;; Command dispatch
+(defn run-command [name]           [:run-command name])
+
 ;; Lifecycle
 (defn quit []                      [:quit])
 

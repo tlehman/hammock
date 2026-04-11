@@ -43,6 +43,8 @@
 (defn install-watches!
   "Set up watches on config atoms. Called by C after all namespaces are loaded."
   []
+  (add-watch *editor* :version-bump
+    (fn [_ _ _ _] (swap! *config-version* inc)))
   (add-watch *keybindings* :version-bump
     (fn [_ _ _ _] (swap! *config-version* inc)))
   (add-watch *commands* :version-bump

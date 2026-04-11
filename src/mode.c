@@ -215,6 +215,11 @@ void modes_load_edn(const char *edn) {
         return;
     }
 
+    /* Reset extension pool: this function is called on every live-reload,
+     * so without this the pool grows unboundedly and eventually stomps
+     * adjacent static memory. */
+    ext_storage_count = 0;
+
     /* Parse each mode: [id "name" "syntax" ["ext1" "ext2"] "keymap-or-nil"] */
     for (int i = 0; i < root->vec.count; i++) {
         EdnVal *entry = root->vec.items[i];
@@ -239,7 +244,8 @@ void modes_load_edn(const char *edn) {
 
         /* Build extensions array */
         const char **ext_list = NULL;
-        if (exts_v && exts_v->type == EDN_VECTOR && exts_v->vec.count > 0) {
+        if (exts_v && exts_v->type == EDN_VECTOR && exts_v->vec.count > 0 &&
+            ext_storage_count < MAX_EXT_STRINGS - 1) {
             int ext_start = ext_storage_count;
             for (int j = 0; j < exts_v->vec.count && ext_storage_count < MAX_EXT_STRINGS - 1; j++) {
                 EdnVal *ext = exts_v->vec.items[j];
@@ -250,9 +256,7 @@ void modes_load_edn(const char *edn) {
                     ext_storage_count++;
                 }
             }
-            /* NULL-terminate the pointer array */
-            ext_ptrs[ext_storage_count] = NULL;
-            ext_storage_count++; /* reserve the NULL slot */
+            ext_ptrs[ext_storage_count++] = NULL;
             ext_list = &ext_ptrs[ext_start];
         }
 

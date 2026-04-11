@@ -779,6 +779,7 @@ static void cmd_eval_last_sexp(void) {
         return;
     }
 
+    state_push_snapshot();
     char *result = sci_eval(sexp);
     free(sexp);
 

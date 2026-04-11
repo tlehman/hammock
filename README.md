@@ -8,7 +8,7 @@ It's a Clojure-oriented editor inspired by Emacs, but it's not Emacs.
 
 It's a Github-flavored-markdown-oriented editor. 
 
-The *scratch* buffer is modeled after the Emacs Lisp scratch buffer, but it runs Clojure (evaluated by [SCI](https://github.com/babashka/sci) in-process via a GraalVM native-image shared library).
+The `*scratch*` buffer is modeled after the Emacs Lisp scratch buffer, but it runs Clojure (evaluated by [SCI](https://github.com/babashka/sci) in-process via a GraalVM native-image shared library).
 
 ## Architecture
 
@@ -42,9 +42,14 @@ Each keystroke is dispatched through the keymap. Hot-path commands (cursor movem
 Users can modify editor behavior live via `C-j` in the scratch buffer.
 
 ## TODO 
-- [ ] feature: add a namespace/symbol explorer, so you can navigate through all the namespaces and symbols and finally jump to definition (is apropos this?)
-- [ ] feature: in markdown mode, math between dollar signs should render with Unicode in text mode, so $x^2$ shows as $x²$ but the dollar signs are a darker color
-- [ ] feature: M-<backspace> deletes who
+- [x] bug: C-j on `(println ...)` throws error
+- [x] bug: Shift-Tab should go backward on welcome screen
+- [ ] feature: 
+- [ ] feature: *Messages* buffer for errors
+- [x] feature: add a namespace/symbol explorer, so you can navigate through all the namespaces and symbols and finally jump to definition
+- [ ] feature: git mode view git log
+- [ ] feature: in markdown mode, tables are displayed with padding and look rectangular (like org-mode)
+- [ ] feature: M-<backspace> deletes whole word
 - [ ] feature: in *scratch* buffer, format all the outputted source code 
 - [ ] feature: tab and code indenting correctly
 - [ ] feature: add mermaidjs tui-rendering for markdown mode
@@ -62,3 +67,27 @@ Users can modify editor behavior live via `C-j` in the scratch buffer.
 
 ## Dependencies
 - [libsci](https://github.com/babashka/sci) Configurable Clojure/Script interpreter suitable for scripting and Clojure DSLs
+
+
+
+
+# TIVS
+## Values
+2, 3, "abc", (fn [x y] [y x])
+
+## Identity
+An identity is a sequence of values in time
+
+(def *editor* (atom {}))
+(swap! *editor assoc :a 2)
+
+## State 
+The state of an identity is the value at a point in time.
+
+## Time 
+
+Demis Hassabis - Deep Mind
+Eternalism - Einstein
+Presentism - Feyman
+
+$ax^2 + b_2x + c = 0$

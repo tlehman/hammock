@@ -21,6 +21,7 @@
 #define HK_PGDN         0x100A
 #define HK_TAB          0x100B
 #define HK_ENTER        0x100C
+#define HK_SHIFT_TAB    0x100D
 #define HK_F1           0x1010
 #define HK_MOUSE        0x1100
 
@@ -48,6 +49,7 @@ typedef struct Keymap {
 
 extern Keymap global_keymap;
 extern Keymap cx_keymap;        /* C-x prefix */
+extern Keymap ch_keymap;        /* C-h help prefix */
 
 void keymap_init(Keymap *km, const char *name);
 void keymap_bind(Keymap *km, int key, int modifiers, const char *command);
