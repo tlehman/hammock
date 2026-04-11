@@ -1,5 +1,62 @@
 # Hammock NEWS -- history of user-visible changes.
 
+## Version 0.1.3 (2026-04-10)
+
+### Command line
+
+- New `-e EXPR` flag for headless Clojure evaluation. `hammock -e '(+ 1 2)'`
+  loads every `clj/*.clj` file in the same order as the interactive editor,
+  evaluates the expression, prints the result, and exits without touching
+  ncurses. Useful for scripting, quick experiments, and inspecting editor
+  state from the shell (e.g.
+  `hammock -e '(count @hammock.state/*commands*)'`).
+
+### Display
+
+- UTF-8 multi-byte characters are now emitted as a single write, so the
+  terminal sees a complete sequence instead of byte fragments split by
+  cursor-move escape codes. Non-ASCII glyphs (the logo, Unicode math,
+  block-drawing symbols) now render correctly in every cell, not just
+  at the start of a run.
+
+### Welcome buffer
+
+- New wider logo (56x28 block-symbol rendering) so the artwork isn't
+  vertically stretched by the terminal's 2:1 cell geometry.
+- The welcome buffer now shows the current Hammock version on the first
+  line.
+- Trimmed the "Get started" list to the two most useful entries:
+  `browse-symbols` and the `*scratch*` buffer.
+
+### Fixes
+
+- Mode live-reload no longer corrupts memory. The extension pool was
+  double-incrementing the NULL-terminator slot and never resetting on
+  reload, eventually stomping adjacent static memory after repeated
+  config changes.
+- `eval-last-sexp` (`C-j`) now pushes an undo snapshot before evaluating,
+  so inserted results can be undone like any other edit.
+- Changes to the `*editor*` atom now bump `*config-version*`, so live
+  reload picks up editor-state tweaks as well as keybinding, command,
+  and mode changes.
+
+## Version 0.1.2 (2026-04-09)
+
+### Introspection
+
+- New namespace/symbol explorer: `C-h s` (also `F1 s`) opens a two-pane
+  buffer listing Clojure namespaces, C modules, and registered commands,
+  with symbol counts. `Enter` on a namespace drills into its symbols;
+  `Enter` on a symbol jumps to its definition. `g` rebuilds the index,
+  `q` closes the explorer.
+- New `apropos` command (`C-h a`) prompts for a pattern and shows a flat
+  list of matching symbols across every indexed source. `Enter` jumps to
+  the definition.
+- Both commands share a cached index built from `clj/*.clj`, `src/*.{c,h}`,
+  and the live commands table, refreshable via `g` inside either buffer.
+- New effect `[:point-to-line N]` jumps to an absolute 1-indexed line
+  number, used by the explorer's jump-to-definition.
+
 ## Version 0.1.1 (2026-04-09)
 
 ### Markdown Mode

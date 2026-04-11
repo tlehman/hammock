@@ -18,6 +18,7 @@
             pkgs.ncurses
             pkgs.clojure
             pkgs.maven
+            pkgs.pkg-config
           ];
 
           shellHook = ''

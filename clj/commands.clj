@@ -4,6 +4,7 @@
             [hammock.core :as core]
             [hammock.git :as git]
             [hammock.markdown :as md]
+            [hammock.symbols :as symbols]
             [clojure.string :as str]))
 
 ;; Register a command: associates a name string with a map of {:fn f :doc docstring}
@@ -160,9 +161,7 @@
                                      (:current-buffer state)
                                      @buflist-marks)]
       [[:buffer-create "*Buffer List*"]
-       [:window-split-below]
-       [:window-other]
-       [:buffer-switch "*Buffer List*"]
+       [:display-buffer "*Buffer List*"]
        [:buffer-set-read-only false]
        [:buffer-set-contents content]
        [:point-to-buffer-start]
@@ -411,6 +410,20 @@
           (swap! link-history conj {:buffer (:current-buffer state)
                                     :point (:point state)})
           (cond
+            (str/starts-with? target "hammock://")
+            (let [rest (subs target (count "hammock://"))
+                  slash (str/index-of rest "/")
+                  kind (if slash (subs rest 0 slash) rest)
+                  arg (if slash (subs rest (inc slash)) "")]
+              (case kind
+                "buffer"  [[:buffer-switch arg]]
+                "command" [[:run-command arg]]
+                "file"    (let [name (last (str/split arg #"/"))]
+                            [[:buffer-create name]
+                             [:buffer-load-file arg]
+                             [:buffer-switch name]])
+                [[:message (str "Unknown hammock:// link: " target)]]))
+
             (or (str/starts-with? target "http://")
                 (str/starts-with? target "https://"))
             [[:shell-command (str "open '" target "'")]
@@ -433,6 +446,10 @@
   (fn []
     [[:search-forward "["]]))
 
+(defcommand "markdown-prev-link" "Jump to the previous link in the buffer."
+  (fn []
+    [[:search-backward "["]]))
+
 (defcommand "markdown-next-heading" "Jump to the next heading."
   (fn []
     [[:search-forward "\n#"]
@@ -451,6 +468,158 @@
         (swap! link-history pop)
         [[:buffer-switch buffer]
          [:point-set point]]))))
+
+;; ---- Symbol explorer ----
+
+(defn- first-namespace-for-pane []
+  (let [idx (symbols/ensure!)]
+    (or (first (keys (:namespaces idx)))
+        (first (keys (:modules idx)))
+        "(all)")))
+
+(defn- symbol-browser-layout-effects []
+  (let [ns-text (symbols/format-namespace-pane)
+        first-ns (first-namespace-for-pane)
+        sym-text (symbols/format-symbol-pane first-ns)]
+    [[:window-delete-others]
+     [:buffer-create "*Symbols*"]
+     [:buffer-switch "*Symbols*"]
+     [:buffer-set-read-only false]
+     [:buffer-set-contents ns-text]
+     [:point-to-buffer-start]
+     [:buffer-set-modified false]
+     [:buffer-set-read-only true]
+     [:buffer-set-mode "Symbol-Browser"]
+     [:window-split-right]
+     [:window-other]
+     [:buffer-create "*Symbol-Detail*"]
+     [:buffer-switch "*Symbol-Detail*"]
+     [:buffer-set-read-only false]
+     [:buffer-set-contents sym-text]
+     [:point-to-buffer-start]
+     [:buffer-set-modified false]
+     [:buffer-set-read-only true]
+     [:buffer-set-mode "Symbol-Detail"]
+     [:window-other]]))
+
+(defcommand "browse-symbols"
+  "Open the namespace/symbol explorer."
+  (fn []
+    (symbols/ensure!)
+    (symbol-browser-layout-effects)))
+
+(defcommand "symbrowse-select"
+  "Populate the right pane with symbols of the namespace at point."
+  (fn []
+    (let [line (fx/current-line)
+          selector (symbols/namespace-at-line line)]
+      (if selector
+        (let [text (symbols/format-symbol-pane selector)]
+          ;; window-other moves into whatever the other pane is holding —
+          ;; possibly a source file if the user just jumped to a symbol —
+          ;; so explicitly switch to *Symbol-Detail* before overwriting.
+          [[:window-other]
+           [:buffer-create "*Symbol-Detail*"]
+           [:buffer-switch "*Symbol-Detail*"]
+           [:buffer-set-read-only false]
+           [:buffer-set-contents text]
+           [:point-to-buffer-start]
+           [:buffer-set-modified false]
+           [:buffer-set-read-only true]
+           [:buffer-set-mode "Symbol-Detail"]])
+        [[:message "Not on a namespace line"]]))))
+
+(defn- visit-symbol-effects [sym]
+  (let [file (:file sym)
+        line (:line sym)
+        base (when file (last (str/split file #"/")))]
+    (cond
+      (or (str/blank? file) (zero? (or line 0)))
+      [[:message (str "No source location for " (:name sym))]]
+
+      :else
+      ;; Keep the explorer buffers alive and the other pane visible so the
+      ;; user can C-o back to *Symbols* and pick another namespace/symbol.
+      [[:buffer-create base]
+       [:buffer-switch base]
+       [:buffer-load-file file]
+       [:point-to-line line]])))
+
+(defcommand "symbrowse-visit"
+  "Jump to the definition of the symbol at point in the explorer."
+  (fn []
+    (let [line (fx/current-line)
+          nm (symbols/name-at-line line)]
+      (if (str/blank? nm)
+        [[:message "No symbol at point"]]
+        (let [idx (symbols/ensure!)
+              hit (or (symbols/find-command nm)
+                      (first (filter #(= nm (:name %))
+                                     (mapcat val (:namespaces idx))))
+                      (first (filter #(= nm (:name %))
+                                     (mapcat val (:modules idx)))))]
+          (if hit
+            (visit-symbol-effects hit)
+            [[:message (str "Symbol not in index: " nm)]]))))))
+
+(defcommand "symbrowse-refresh"
+  "Rebuild the symbol index and re-render the explorer."
+  (fn []
+    (symbols/rebuild!)
+    (symbol-browser-layout-effects)))
+
+(defcommand "symbrowse-quit"
+  "Close the symbol explorer."
+  (fn []
+    [[:buffer-destroy "*Symbol-Detail*"]
+     [:buffer-destroy "*Symbols*"]
+     [:window-delete-others]
+     [:buffer-switch "*scratch*"]]))
+
+;; ---- Apropos ----
+
+(defn- apropos-layout-effects [pattern]
+  (let [text (symbols/format-apropos pattern)]
+    [[:buffer-create "*Apropos*"]
+     [:window-split-below]
+     [:window-other]
+     [:buffer-switch "*Apropos*"]
+     [:buffer-set-read-only false]
+     [:buffer-set-contents text]
+     [:point-to-buffer-start]
+     [:buffer-set-modified false]
+     [:buffer-set-read-only true]
+     [:buffer-set-mode "Apropos"]]))
+
+(defcommand "apropos"
+  "Prompt for a pattern and list matching symbols."
+  (fn []
+    [[:prompt "Apropos: " "hammock.commands/apropos-cb" :none]]))
+
+(defn apropos-cb [pattern]
+  (symbols/ensure!)
+  (apropos-layout-effects pattern))
+
+(defcommand "apropos-visit"
+  "Jump to the definition of the symbol at point in the apropos buffer."
+  (fn []
+    (let [line (fx/current-line)
+          nm (symbols/apropos-name-at-line line)]
+      (if (str/blank? nm)
+        [[:message "No symbol at point"]]
+        (let [idx (symbols/ensure!)
+              hit (or (symbols/find-command nm)
+                      (first (filter #(= nm (:name %))
+                                     (mapcat val (:namespaces idx))))
+                      (first (filter #(= nm (:name %))
+                                     (mapcat val (:modules idx)))))]
+          (if hit
+            (visit-symbol-effects hit)
+            [[:message (str "Symbol not in index: " nm)]]))))))
+
+(defcommand "apropos-quit"
+  "Close the apropos window."
+  (fn [] [[:buffer-destroy "*Apropos*"] [:window-delete]]))
 
 ;; ---- Version ----
 

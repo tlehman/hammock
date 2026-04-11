@@ -1,6 +1,7 @@
 /hammock
 /build/
 src/news_data.h
+src/hammock_logo_data.h
 
 # libsci build artifacts
 libsci/*.dylib

@@ -38,14 +38,16 @@ void window_destroy(Window *win) {
     free(win);
 }
 
-/* Count visual columns for a buffer range, handling tabs */
+/* Count visual columns for a buffer range, handling tabs.
+ * Matches display_refresh_window: each UTF-8 sequence occupies 1 column
+ * (continuation bytes 0x80-0xBF are skipped). */
 static int visual_cols(Buffer *buf, size_t from, size_t to) {
     int vcol = 0;
     for (size_t p = from; p < to; p++) {
-        char ch = buffer_char_at(buf, p);
+        unsigned char ch = (unsigned char)buffer_char_at(buf, p);
         if (ch == '\t')
             vcol += 4 - (vcol % 4);
-        else
+        else if ((ch & 0xC0) != 0x80)
             vcol++;
     }
     return vcol;

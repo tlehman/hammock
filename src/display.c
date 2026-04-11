@@ -358,6 +358,40 @@ void display_refresh_window(Window *win, bool is_current) {
                 continue;
             }
 
+            /* UTF-8 multi-byte: emit the whole sequence in one write so
+             * the terminal sees valid UTF-8 instead of byte fragments
+             * split by cursor-move escapes. */
+            unsigned char lead = (unsigned char)ch;
+            if (lead >= 0xC0) {
+                int nbytes = 1;
+                if ((lead & 0xE0) == 0xC0) nbytes = 2;
+                else if ((lead & 0xF0) == 0xE0) nbytes = 3;
+                else if ((lead & 0xF8) == 0xF0) nbytes = 4;
+                if ((size_t)nbytes > buffer_length(buf) - pos) {
+                    nbytes = (int)(buffer_length(buf) - pos);
+                }
+                char utf8[5] = {0};
+                for (int i = 0; i < nbytes; i++) {
+                    utf8[i] = buffer_char_at(buf, pos + i);
+                }
+
+                if (has_region && pos >= region_start && pos < region_end) {
+                    attron(COLOR_PAIR(COLOR_REGION));
+                    mvaddstr(win->y + row, win->x + col, utf8);
+                    attroff(COLOR_PAIR(COLOR_REGION));
+                } else if (color_pair) {
+                    attron(COLOR_PAIR(color_pair) | extra_attr);
+                    mvaddstr(win->y + row, win->x + col, utf8);
+                    attroff(COLOR_PAIR(color_pair) | extra_attr);
+                } else {
+                    mvaddstr(win->y + row, win->x + col, utf8);
+                }
+
+                col++;
+                pos += nbytes;
+                continue;
+            }
+
             /* Apply region highlight (overrides syntax) or syntax color */
             if (has_region && pos >= region_start && pos < region_end) {
                 attron(COLOR_PAIR(COLOR_REGION));

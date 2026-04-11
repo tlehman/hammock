@@ -10,6 +10,7 @@
 #include "shell.h"
 #include "git.h"
 #include "news.h"
+#include "welcome.h"
 #include "effects.h"
 #include "util.h"
 #include <stdio.h>
@@ -248,10 +249,65 @@ static void handle_mouse(void) {
     }
 }
 
+static int run_headless_eval(const char *expr) {
+    if (!sci_init()) {
+        fprintf(stderr, "hammock: could not initialize SCI interpreter\n");
+        return 1;
+    }
+    const char *files[] = {
+        "clj/state.clj", "clj/effects.clj", "clj/core.clj",
+        "clj/git.clj", "clj/markdown.clj", "clj/symbols.clj",
+        "clj/commands.clj", "clj/keybindings.clj", "clj/modes.clj",
+    };
+    for (size_t i = 0; i < sizeof(files) / sizeof(files[0]); i++) {
+        free(sci_load_file(files[i]));
+    }
+    char *result = sci_eval(expr);
+    if (result) {
+        puts(result);
+        free(result);
+    }
+    sci_shutdown();
+    return 0;
+}
+
 int main(int argc, char *argv[]) {
     /* Enable UTF-8 output so ncurses renders multi-byte characters
      * (needed for inline math Unicode substitutions). */
     setlocale(LC_ALL, "");
+
+    /* Command-line flags:
+     *   -e EXPR  headless Clojure eval (prints result, exits)
+     *   -v       print version and exit
+     *   -h       print usage and exit
+     * A bare filename argument is opened in the editor. */
+    const char *eval_expr = NULL;
+    int file_arg_idx = 0;
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-e") == 0 && i + 1 < argc) {
+            eval_expr = argv[i + 1];
+            i++;
+        } else if (strcmp(argv[i], "-v") == 0 ||
+                   strcmp(argv[i], "--version") == 0) {
+            printf("hammock %s\n", HAMMOCK_VERSION);
+            return 0;
+        } else if (strcmp(argv[i], "-h") == 0 ||
+                   strcmp(argv[i], "--help") == 0) {
+            printf("Usage: %s [options] [file]\n"
+                   "\n"
+                   "Options:\n"
+                   "  -e EXPR      evaluate a Clojure expression and exit\n"
+                   "  -v, --version  print version and exit\n"
+                   "  -h, --help     print this help and exit\n"
+                   "\n"
+                   "With no file, opens the *Hammock* welcome buffer.\n",
+                   argv[0]);
+            return 0;
+        } else if (!file_arg_idx) {
+            file_arg_idx = i;
+        }
+    }
+    if (eval_expr) return run_headless_eval(eval_expr);
 
     /* Initialize C subsystems */
     commands_init();
@@ -276,6 +332,7 @@ int main(int argc, char *argv[]) {
         free(sci_load_file("clj/core.clj"));
         free(sci_load_file("clj/git.clj"));
         free(sci_load_file("clj/markdown.clj"));
+        free(sci_load_file("clj/symbols.clj"));
         free(sci_load_file("clj/commands.clj"));
         free(sci_load_file("clj/keybindings.clj"));
         free(sci_load_file("clj/modes.clj"));
@@ -339,21 +396,26 @@ int main(int argc, char *argv[]) {
         scratch->modified = false;
         buffer_set_mode(scratch, MODE_CLOJURE);
     }
+    (void)scratch;
 
-    /* Open file if given, otherwise start in scratch */
+    /* Create *Hammock* welcome buffer (registers the `welcome` command) */
+    Buffer *welcome_buf = welcome_init();
+
+    /* Open file if given, otherwise start in *Hammock* welcome buffer */
     Buffer *buf;
-    if (argc > 1) {
-        const char *path = argv[1];
+    if (file_arg_idx) {
+        const char *path = argv[file_arg_idx];
         const char *name = strrchr(path, '/');
         name = name ? name + 1 : path;
         buf = buffer_create(name);
+        MajorModeID detected = mode_detect(path);
         if (!buffer_load_file(buf, path)) {
             buf->filename = hstrdup(path);
             message("(New file)");
         }
-        buffer_set_mode(buf, mode_detect(path));
+        buffer_set_mode(buf, detected);
     } else {
-        buf = scratch;
+        buf = welcome_buf;
     }
 
     current_buffer = buf;
@@ -406,6 +468,7 @@ int main(int argc, char *argv[]) {
                 move(sy, sx);
             }
             refresh();
+
             need_redisplay = false;
         }
 
@@ -528,3 +591,5 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
+
+

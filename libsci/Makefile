@@ -23,10 +23,13 @@ $(UBER_JAR):
 	clojure -T:build uber
 
 # Step 2: Compile to native shared library
+# --shared mode scans the classpath for @CEntryPoint methods, so no
+# main class is needed. Using -cp (not -jar) since the uber jar has
+# no Main-Class manifest.
 $(TARGET): $(UBER_JAR)
 	native-image \
 		--shared \
-		-jar $(UBER_JAR) \
+		-cp $(UBER_JAR) \
 		-H:Name=libsci \
 		--no-fallback \
 		--initialize-at-build-time \
