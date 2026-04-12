@@ -1,5 +1,35 @@
 # Hammock NEWS -- history of user-visible changes.
 
+## Version 0.2.2 (2026-04-12)
+
+### Lisp-authoritative architecture
+
+- **Mode-enum drop.** The compile-time `MajorModeID` enum in `src/mode.h`
+  is gone. `Buffer.major_mode` (int) is now `Buffer.mode_name`
+  (const char *). The mode registry in `src/mode.c` is a string-keyed
+  linear-scan array rebuilt from `clj/modes.clj` on live reload.
+  Adding a new mode is now a pure Clojure change: no C enum to extend.
+
+- **Keybindings are 100% Clojure-owned.** The 98-line
+  `keybindings_init()` function (hardcoded C key bindings) has been
+  deleted. All keybindings load exclusively via
+  `keybindings_load_edn()` from `clj/keybindings.clj`. The C keymap
+  structs are a read-only cached snapshot populated by Clojure. SCI is
+  now required for normal operation.
+
+- **Per-domain snapshot protocol.** `clj/state.clj` now tracks
+  per-domain version counters (`:keymaps`, `:modes`, `:commands`,
+  `:windows`) via `*config-versions*`. The main loop checks the global
+  `*config-version*` as a fast poll, then fetches per-domain versions
+  to rebuild only changed snapshots. Each rebuild is wrapped in a perf
+  probe (`snapshot-rebuild:keymaps`, `snapshot-rebuild:modes`).
+
+### Perf
+
+- Zero keystroke-latency regression across all changes. Bench results
+  (p50 within noise floor of v0.2.1 baseline):
+  forward-char 0 ns, next-line 11-14 µs, beginning-of-line 0 ns.
+
 ## Version 0.2.1 (2026-04-12)
 
 ### Perf harness

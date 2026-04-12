@@ -609,10 +609,10 @@ int main(int argc, char *argv[]) {
         /* Install atom watches for live reload */
         free(sci_eval("(hammock.state/install-watches!)"));
     } else {
-        /* Fallback: use C-defined keybindings and modes */
-        keybindings_init();
+        /* SCI is required: all keybindings and modes live in Clojure.
+         * Fall back to bare modes_init so buffers at least have names. */
         modes_init();
-        message("Warning: Could not initialize SCI interpreter");
+        message("ERROR: Could not initialize SCI interpreter — no keybindings loaded");
     }
 
     /* Always create *scratch* buffer */

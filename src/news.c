@@ -23,7 +23,7 @@ static void cmd_view_news(void) {
     buf->point = 0;
     buf->modified = false;
     buf->read_only = true;
-    buffer_set_mode(buf, MODE_MARKDOWN);
+    buffer_set_mode(buf, "Markdown");
 
     current_window->buffer = buf;
     current_buffer = buf;

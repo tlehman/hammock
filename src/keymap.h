@@ -56,10 +56,9 @@ void keymap_bind(Keymap *km, int key, int modifiers, const char *command);
 void keymap_bind_prefix(Keymap *km, int key, int modifiers, Keymap *submap);
 const char *keymap_lookup(Keymap *km, int key, int modifiers, Keymap **submap_out);
 
-/* Initialize all default keybindings */
-void keybindings_init(void);
-
-/* Load keybindings from EDN string (from Clojure export) */
+/* Load keybindings from EDN string (from Clojure export).
+ * This is the sole entry point for populating keymaps — all binding
+ * definitions live in clj/keybindings.clj. */
 void keybindings_load_edn(const char *edn);
 
 /* Find a mode-specific keymap by name (loaded from Clojure) */
