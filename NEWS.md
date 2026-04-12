@@ -1,5 +1,60 @@
 # Hammock NEWS -- history of user-visible changes.
 
+## Version 0.2.1 (2026-04-12)
+
+### Perf harness
+
+- New perf subsystem (`src/perf.c`, `src/perf.h`) with three modes that
+  share a single EDN output shape and a single pair of probes around
+  `command_dispatch` in `src/command.c`. When disabled, each probe is a
+  one-branch no-op (~1 ns). Monotonic clock via `clock_gettime`.
+- **Bench mode**: `hammock --bench perf/scripts/<file>.edn` loads SCI
+  headlessly (no ncurses), walks a flat vector of directive sub-vectors
+  (`[:fixture ...]`, `[:warmup N]`, `[:iterations N]`, `[:case "label"
+  "command"]`), warms up, times each case, and writes aggregated
+  min/p50/p90/p99/max/mean ns to `perf/runs/<ts>-<host>.edn`. Runner
+  lives in `run_bench` in `src/main.c`.
+- **PTY mode**: new `test/pty_bench.c` external driver (built via
+  `make pty-bench`) forks `./hammock` under a pseudo-terminal, feeds a
+  plain-text script of `wait-for` / `send` / `measure` directives,
+  and times by the 5 ms idle-window method. Useful for catching
+  regressions that cross ncurses, which the bench mode skips.
+- **Ambient mode**: `HAMMOCK_PERF=/path/to/log.edn ./hammock` streams
+  one `{:label ... :ns ...}` map per dispatched command to the log
+  file, capped at 50k samples. `(hammock.perf/summarize "/path")`
+  aggregates the stream into the same shape as bench mode.
+- New `clj/perf.clj` namespace: `load-run`, `diff-runs`, `report`
+  (color-coded before/after table), `summarize`. Lives under SCI and
+  uses `hammock.shell/exec` + `read-string` since `slurp` and
+  `clojure.edn` are not available in our native-image SCI build.
+
+### Harness scripts and fixtures
+
+- Generated fixtures under `perf/fixtures/` (not committed): small
+  (100 lines), medium (10k), large (100k). Built by `make perf-fixtures`.
+- Committed scripts under `perf/scripts/`: `keystroke-latency.edn`,
+  `cursor-macro.edn`, `dispatch-mix.edn`, plus stubs for
+  `snapshot-rebuild.edn` and `live-reload.edn` which v0.2.2 will fill
+  in once the window/keymap snapshot protocol lands.
+
+### Makefile
+
+- New phony targets: `perf-fixtures`, `perf-run`, `perf-baseline`,
+  `perf-diff`, `pty-bench`, `perf-pty`. `perf-baseline` tags output
+  files as `perf/baselines/v<version>-<host>-<script>.edn` and is
+  meant to be run once per host and committed.
+
+### EDN parser
+
+- `src/effects.c` now skips `;` line comments inside `skip_whitespace`,
+  matching the EDN spec. Previously the parser rejected any input with
+  comments, which blocked perf scripts from having headers.
+
+### Help text
+
+- `hammock --help` now advertises `--bench PATH` and the `HAMMOCK_PERF`
+  env var alongside the existing `-e EXPR` / `-v` / `-h` flags.
+
 ## Version 0.2.0 (2026-04-11)
 
 ### *Messages* buffer

@@ -1,0 +1,9 @@
+;; Hammock perf: live-reload end-to-end latency (v0.2.2 stub).
+;;
+;; Placeholder. v0.2.2 fills this in: it will eval-last-sexp a
+;; `(hammock.keybindings/bind! ...)` form and time until the new binding
+;; is live on the next `command_dispatch`.
+[[:fixture "perf/fixtures/small.txt"]
+ [:warmup 10]
+ [:iterations 10]
+ [:case "forward-char" "forward-char"]]

@@ -1,0 +1,13 @@
+;; Hammock perf: mix of C-native and Clojure-routed commands over medium
+;; fixture. Reveals asymmetric regressions where one dispatch path slows
+;; relative to the other. The `pop-mark` / `set-mark` / `keyboard-quit`
+;; cases touch distinct code paths inside command_dispatch.
+[[:fixture "perf/fixtures/medium.txt"]
+ [:warmup 50]
+ [:iterations 500]
+ [:case "forward-char"    "forward-char"]
+ [:case "set-mark"        "set-mark"]
+ [:case "keyboard-quit"   "keyboard-quit"]
+ [:case "forward-word"    "forward-word"]
+ [:case "scroll-down"     "scroll-down"]
+ [:case "scroll-up"       "scroll-up"]]

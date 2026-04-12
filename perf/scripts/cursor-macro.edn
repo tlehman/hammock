@@ -1,0 +1,9 @@
+;; Hammock perf: coarser-grained cursor motion over the medium fixture.
+;; Word/paragraph moves exercise buffer traversal, not just single-char step.
+[[:fixture "perf/fixtures/medium.txt"]
+ [:warmup 50]
+ [:iterations 500]
+ [:case "forward-word"         "forward-word"]
+ [:case "backward-word"        "backward-word"]
+ [:case "beginning-of-buffer"  "beginning-of-buffer"]
+ [:case "end-of-buffer"        "end-of-buffer"]]
