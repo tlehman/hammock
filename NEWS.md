@@ -1,5 +1,104 @@
 # Hammock NEWS -- history of user-visible changes.
 
+## Version 0.2.3 (2026-04-12)
+
+### Input
+
+- **Arrow keys, Home/End, Delete, PgUp/PgDn, F1, and modified arrows
+  (Meta+/Ctrl+/Ctrl-Meta+) now move the cursor.** `input_read()` bypasses
+  ncurses' keypad decoder because it reads raw stdin to intercept SGR
+  mouse sequences and then feeds bytes back via `ungetch()` -- and
+  ungetch'd bytes never trigger escape reassembly. A new
+  `try_parse_vt100()` decoder in `src/input.c` handles both the CSI
+  (`\033[A`) and SS3 (`\033OA`, emitted in application-cursor-keys mode)
+  forms directly from the raw buffer before anything else.
+
+### Evaluation
+
+- **`sci_eval` errors now route to `*Messages*` and the minibuffer
+  instead of being silently swallowed or masquerading as values.**
+  `libsci.dylib` returns `sci_eval error: <msg>` strings rather than
+  printing to stderr (which corrupted the ncurses display) or returning
+  `"nil"` (which looked like a value). `cmd_eval_last_sexp` in
+  `src/command.c` detects the prefix, calls `message()`, and no longer
+  inserts error text as `; => ERROR: ...` in `*scratch*`. The Clojure
+  command dispatch path in `command_dispatch` applies the same check
+  before handing results to `effects_execute`.
+- **`C-g` cancels a long-running `sci_eval`.** New
+  `sci_eval_interruptible()` in `src/sci.c` forks a child that owns a
+  CoW copy of the SCI isolate, polls both the result pipe and stdin,
+  and `SIGKILL`s the child on `C-g` or `ESC`. The parent's isolate is
+  untouched, so session state survives cancellation. Used by
+  `eval-last-sexp` (`C-j`); paints `"Evaluating... (C-g to cancel)"`
+  while the child runs.
+
+### Markdown
+
+- **`[[wikilink]]` visits jump to the target file immediately, without
+  corrupting the source buffer.** The effect sequence emitted by
+  `markdown-follow-link` had `buffer-load-file` running before
+  `buffer-switch`, so the file content loaded into the buffer the user
+  was *leaving* (e.g. README.md got CLAUDE.md's bytes under the name
+  "README.md") and the user landed on an empty buffer. Reordered to
+  `[buffer-create, buffer-switch, buffer-load-file]`, and added an
+  already-in-buffer-list short-circuit that just switches, so re-visiting
+  a link reuses the existing buffer instead of clobbering in-progress
+  edits or creating duplicates. Same fix applied to `find-file-cb` (which
+  was also missing a `buffer-switch` entirely) and `git-visit-file`.
+
+### Kill ring
+
+- **`M-y` cycles back through the kill ring after `C-y`.** The
+  existing 16-slot `KillRing` in `src/util.c` was already fed by
+  `kill-line`, `kill-region`, and `kill-ring-save`, but `yank` only
+  ever read the most recent entry. A new `kill_ring_nth(kr, offset)`
+  lets `:yank-pop` walk backward. Static yank state in `src/effects.c`
+  (`yank_state_buf`, `yank_state_start`, `yank_state_end`,
+  `yank_state_offset`) records where and how much `:yank` inserted;
+  `:yank-pop` deletes that span and replaces it with the next-older
+  kill, advancing the offset. Any other mutating effect (`:insert`,
+  `:delete-forward`, `:delete-backward`, `:kill-region`, `:kill-line`,
+  `:copy-region`, `:undo`, `:buffer-set-contents`, `:buffer-switch`,
+  `:buffer-load-file`, `:buffer-append-text`) plus the hot-path
+  `self_insert` in `main.c` calls `yank_state_invalidate()`, so
+  `M-y` reports "Previous command was not a yank" exactly when Emacs
+  would.
+- **`M-<Backspace>` kills the word before point.** New Clojure
+  command `backward-kill-word` composes existing effects:
+  `[[:set-mark] [:point-backward-word] [:kill-region]]`. The kill
+  lands in the ring (and the system clipboard), so `C-y` / `M-y`
+  can recall it. Two smaller plumbing fixes were needed: (1) the
+  `src/input.c` M-Backspace handler used to strip `MOD_META` to
+  work around spurious ESC+127 on old terminals. That strip is
+  gone, so `M-Backspace` is now distinguishable from plain
+  `Backspace`. (2) `parse-key-spec` in `clj/keybindings.clj` did
+  not handle `M-<special>` (it would decode "M-Backspace" as
+  `M-B`). It now recognizes Backspace/Delete/Up/Down/Left/Right/
+  Home/End/PgUp/PgDn/Tab/Enter with a modifier prefix.
+
+### Git
+
+- **`git log` view: `l` in `*git-status*` opens a read-only
+  `*git-log*` buffer with recent commits** (`git log --oneline -50`).
+  The buffer lives in a new `Git-Log` mode (id 14 in `clj/modes.clj`)
+  with `g` to refresh and `q` to close. The `git/git-log` helper in
+  `clj/git.clj` had been dormant since v0.1.0; it finally has a
+  caller.
+- **`git fetch`/`pull`/`push` from the status buffer.** `f` fetches,
+  `F` pulls, `P` pushes (Magit's single-key convention) under
+  `mode:git-status`. A new `exec-out-err` helper in `clj/git.clj`
+  concatenates `:out` and `:err` from `shell/exec` because git writes
+  network progress to stderr. The combined message surfaces in the
+  minibuffer and `*Messages*`, then `*git-status*` refreshes via
+  `git-status-effects`, matching the `git-commit-cb` pattern.
+- **`q` now actually quits git mode.** `git-quit` previously just
+  switched away from `*git-status*` and left it in the buffer list.
+  It now switches to the first non-git buffer (fallback `*scratch*`),
+  collapses any diff split via `window-delete-others`, and destroys
+  `*git-status*`, `*git-diff*`, and `*git-log*`. The
+  switch-before-destroy order is mandatory because `buffer-destroy`
+  (`src/effects.c:469`) silently skips the current buffer.
+
 ## Version 0.2.2 (2026-04-12)
 
 ### Lisp-authoritative architecture

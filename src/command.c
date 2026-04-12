@@ -24,6 +24,21 @@ bool need_redisplay = true;
 
 KillRing kill_ring;
 
+/* Heuristic: does an sci_eval result look like an error rather than a value?
+ * SCI returns errors as strings containing the exception class or message, and
+ * sci_eval prepends "ERROR:" for its own failure modes (uninitialized isolate,
+ * etc.). Keep this conservative so valid results like "\"Exception handling\""
+ * aren't misclassified — require the marker at the start or a Java-style
+ * Exception/Error token in the text. */
+static bool sci_result_is_error(const char *result) {
+    if (!result) return false;
+    if (strncmp(result, "ERROR", 5) == 0) return true;
+    if (strncmp(result, "sci_eval error", 14) == 0) return true;
+    if (strstr(result, "Exception") != NULL) return true;
+    if (strstr(result, "clojure.lang.ExceptionInfo") != NULL) return true;
+    return false;
+}
+
 void command_register(const char *name, CommandFn fn, const char *docstring) {
     if (command_count >= MAX_COMMANDS) return;
     command_table[command_count].name = name;
@@ -94,7 +109,13 @@ void command_dispatch(const char *name, bool clj_available) {
                  "(hammock.commands/dispatch \"%s\")", name);
         char *effects_edn = sci_eval(dispatch_code);
         if (effects_edn) {
-            effects_execute(effects_edn);
+            if (sci_result_is_error(effects_edn)) {
+                /* effects_execute silently drops strings with no '[' — surface
+                 * the error through message() so it lands in *Messages*. */
+                message("sci_eval error in %s: %s", name, effects_edn);
+            } else {
+                effects_execute(effects_edn);
+            }
             free(effects_edn);
         }
         perf_record("dispatch-clojure", perf_now_ns() - t0);
@@ -788,25 +809,49 @@ static void cmd_eval_last_sexp(void) {
     }
 
     state_push_snapshot();
-    char *result = sci_eval(sexp);
+
+    /* Paint the "evaluating" notice before the eval starts so the user sees
+     * it even for a slow first fork. The minibuffer is already owned by us
+     * for the duration of the call. */
+    snprintf(minibuf_message, sizeof(minibuf_message),
+             "Evaluating... (C-g to cancel)");
+    display_minibuffer(minibuf_message);
+    refresh();
+
+    SciEvalResult er = sci_eval_interruptible(sexp);
     free(sexp);
 
-    if (result) {
-        /* Insert result into *scratch* buffer */
-        Buffer *scratch = buffer_find("*scratch*");
-        if (!scratch) {
-            scratch = buffer_create("*scratch*");
-            buffer_set_mode(scratch, "Clojure");
-        }
-        //TODO try inserting at point (leave commented)
-        //scratch->point = buffer_length(scratch);
-        char *insertion = hmalloc(strlen(result) + 8);
-        sprintf(insertion, "\n; => %s", result);
-        buffer_insert_string(scratch, insertion, strlen(insertion));
-        free(insertion);
-        message("=> %s", result);
-        free(result);
+    if (er.cancelled) {
+        message("Quit");
+        return;
     }
+
+    char *result = er.result;
+    if (!result) return;
+
+    if (sci_result_is_error(result)) {
+        /* Route the error to both the minibuffer and *Messages* (message()
+         * handles both). Do NOT insert the error into *scratch* — it would
+         * look like a value (`; => ERROR: ...`) and clutter the buffer. */
+        message("sci_eval error: %s", result);
+        free(result);
+        return;
+    }
+
+    /* Insert result into *scratch* buffer */
+    Buffer *scratch = buffer_find("*scratch*");
+    if (!scratch) {
+        scratch = buffer_create("*scratch*");
+        buffer_set_mode(scratch, "Clojure");
+    }
+    //TODO try inserting at point (leave commented)
+    //scratch->point = buffer_length(scratch);
+    char *insertion = hmalloc(strlen(result) + 8);
+    sprintf(insertion, "\n; => %s", result);
+    buffer_insert_string(scratch, insertion, strlen(insertion));
+    free(insertion);
+    message("=> %s", result);
+    free(result);
 }
 
 /* Buffer list commands moved to clj/commands.clj */

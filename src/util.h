@@ -22,6 +22,9 @@ typedef struct {
 void kill_ring_init(KillRing *kr);
 void kill_ring_push(KillRing *kr, const char *text);
 const char *kill_ring_top(KillRing *kr);
+/* Return the entry `offset` steps older than the newest (0 = newest).
+ * Wraps around modulo count. Returns NULL when the ring is empty. */
+const char *kill_ring_nth(KillRing *kr, int offset);
 void kill_ring_free(KillRing *kr);
 
 /* Undo system */

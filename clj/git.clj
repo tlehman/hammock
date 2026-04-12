@@ -72,6 +72,14 @@
 (defn git-log [n]
   (:out (shell/exec ["git" "log" "--oneline" (str "-" n)])))
 
+(defn- exec-out-err [args]
+  (let [r (shell/exec args)]
+    (str/trim (str (:out r) (:err r)))))
+
+(defn git-fetch [] (exec-out-err ["git" "fetch"]))
+(defn git-pull  [] (exec-out-err ["git" "pull"]))
+(defn git-push  [] (exec-out-err ["git" "push"]))
+
 (defn git-commit-with-msg [msg]
   (let [result (shell/exec ["git" "commit" "-m" msg])]
     (str/trim (:out result))))

@@ -130,6 +130,22 @@ int main(void) {
     expect_true("C-h e binding exported",
                 "(boolean (some #(and (= \"ch\" (first %)) (= \"view-messages\" (last %))) (hammock.keybindings/export)))");
 
+    puts("\nKill ring / yank-pop...");
+    expect_true("yank-pop registered",
+                "(contains? @hammock.state/*commands* \"yank-pop\")");
+    expect_true("backward-kill-word registered",
+                "(contains? @hammock.state/*commands* \"backward-kill-word\")");
+    expect_true("yank-pop dispatch returns [[:yank-pop]]",
+                "(= [[:yank-pop]] (hammock.commands/dispatch \"yank-pop\"))");
+    expect_true("backward-kill-word dispatch builds set-mark/backward-word/kill-region",
+                "(= [[:set-mark] [:point-backward-word] [:kill-region]] (hammock.commands/dispatch \"backward-kill-word\"))");
+    /* M-Backspace = HK_BACKSPACE (0x1001 = 4097) with MOD_META (2). */
+    expect_true("M-Backspace bound to backward-kill-word",
+                "(boolean (some #(and (= \"global\" (first %)) (= 4097 (nth % 1)) (= 2 (nth % 2)) (= \"backward-kill-word\" (last %))) (hammock.keybindings/export)))");
+    /* M-y = 121 with MOD_META (2). */
+    expect_true("M-y bound to yank-pop",
+                "(boolean (some #(and (= \"global\" (first %)) (= 121 (nth % 1)) (= 2 (nth % 2)) (= \"yank-pop\" (last %))) (hammock.keybindings/export)))");
+
     puts("\n*Messages* plumbing...");
     expect_true("view-messages registered",
                 "(contains? @hammock.state/*commands* \"view-messages\")");

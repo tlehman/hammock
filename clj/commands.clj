@@ -128,6 +128,16 @@
 (defcommand "yank" "Yank the last kill into the buffer at point."
   (fn [] [[:yank]]))
 
+(defcommand "yank-pop"
+  "Replace the just-yanked text with the previous kill-ring entry."
+  (fn [] [[:yank-pop]]))
+
+(defcommand "backward-kill-word"
+  "Kill the word before point; push it onto the kill ring."
+  (fn [] [[:set-mark]
+          [:point-backward-word]
+          [:kill-region]]))
+
 ;; ---- Undo ----
 
 (defcommand "undo" "Undo the last change."
@@ -261,9 +271,13 @@
   (fn [] [[:prompt "Find file: " "hammock.commands/find-file-cb" :file]]))
 
 (defn find-file-cb [path]
-  (let [name (last (clojure.string/split path #"/"))]
-    [[:buffer-create name]
-     [:buffer-load-file path]]))
+  (let [name (last (clojure.string/split path #"/"))
+        existing (some #(= (:name %) name) (fx/buffers))]
+    (if existing
+      [[:buffer-switch name]]
+      [[:buffer-create name]
+       [:buffer-switch name]
+       [:buffer-load-file path]])))
 
 (defcommand "switch-to-buffer" "Switch to a different buffer by name."
   (fn [] [[:prompt "Switch to buffer: " "hammock.commands/switch-to-buffer-cb" :buffer]]))
@@ -371,21 +385,73 @@
   (fn []
     (let [path (git/extract-file-from-status-line (fx/current-line))]
       (if path
-        (let [name (last (str/split path #"/"))]
-          [[:buffer-create name]
-           [:buffer-load-file path]
-           [:buffer-switch name]])
+        (let [name (last (str/split path #"/"))
+              existing (some #(= (:name %) name) (fx/buffers))]
+          (if existing
+            [[:buffer-switch name]]
+            [[:buffer-create name]
+             [:buffer-switch name]
+             [:buffer-load-file path]]))
         [[:message "No file at point"]]))))
 
-(defcommand "git-quit" "Leave the git status buffer."
+(defcommand "git-quit" "Quit git mode: close git buffers and return to previous buffer."
   (fn []
     (let [bufs (fx/buffers)
-          target (or (first (keep #(when (and (not= (:name %) "*git-status*")
-                                              (not= (:name %) "*git-diff*"))
-                                     (:name %))
-                                  bufs))
+          git-names #{"*git-status*" "*git-diff*" "*git-log*"}
+          target (or (first (keep #(when-not (git-names (:name %)) (:name %)) bufs))
                      "*scratch*")]
-      [[:buffer-switch target]])))
+      [[:buffer-switch target]
+       [:window-delete-others]
+       [:buffer-destroy "*git-status*"]
+       [:buffer-destroy "*git-diff*"]
+       [:buffer-destroy "*git-log*"]])))
+
+(defn- git-log-effects
+  "Return effects to populate the *git-log* buffer with recent commits."
+  []
+  (let [content (git/git-log 50)]
+    [[:buffer-set-read-only false]
+     [:buffer-set-contents content]
+     [:point-to-buffer-start]
+     [:buffer-set-modified false]
+     [:buffer-set-read-only true]
+     [:buffer-set-mode "Git-Log"]]))
+
+(defcommand "git-log" "Show recent git log in a dedicated buffer."
+  (fn []
+    (let [existing (some #(= (:name %) "*git-log*") (fx/buffers))]
+      (if existing
+        (into [[:buffer-switch "*git-log*"]] (git-log-effects))
+        (into [[:buffer-create "*git-log*"]
+               [:buffer-switch "*git-log*"]]
+              (git-log-effects))))))
+
+(defcommand "git-log-quit" "Close the git log buffer."
+  (fn []
+    (let [bufs (fx/buffers)
+          target (or (some #(when (= (:name %) "*git-status*") (:name %)) bufs)
+                     (first (keep #(when-not (= (:name %) "*git-log*") (:name %)) bufs))
+                     "*scratch*")]
+      [[:buffer-switch target]
+       [:buffer-destroy "*git-log*"]])))
+
+(defcommand "git-fetch" "Fetch from remote and refresh status."
+  (fn []
+    (let [result (git/git-fetch)
+          msg (if (str/blank? result) "Fetch complete" result)]
+      (into [[:message msg]] (git-status-effects)))))
+
+(defcommand "git-pull" "Pull from remote and refresh status."
+  (fn []
+    (let [result (git/git-pull)
+          msg (if (str/blank? result) "Pull complete" result)]
+      (into [[:message msg]] (git-status-effects)))))
+
+(defcommand "git-push" "Push to remote and refresh status."
+  (fn []
+    (let [result (git/git-push)
+          msg (if (str/blank? result) "Push complete" result)]
+      (into [[:message msg]] (git-status-effects)))))
 
 (defcommand "git-commit" "Commit staged changes."
   (fn []
@@ -412,13 +478,16 @@
           link (md/link-at-point line col)]
       (case (:type link)
         :bidir
-        (let [filename (str (:target link) ".md")]
+        (let [filename (str (:target link) ".md")
+              existing (some #(= (:name %) filename) (:buffers state))]
           (swap! link-history conj {:buffer (:current-buffer state)
                                     :point (:point state)})
-          [[:buffer-create filename]
-           [:buffer-load-file filename]
-           [:buffer-switch filename]
-           [:buffer-set-mode "Markdown"]])
+          (if existing
+            [[:buffer-switch filename]]
+            [[:buffer-create filename]
+             [:buffer-switch filename]
+             [:buffer-load-file filename]
+             [:buffer-set-mode "Markdown"]]))
 
         :markdown
         (let [target (:target link)]
@@ -433,10 +502,13 @@
               (case kind
                 "buffer"  [[:buffer-switch arg]]
                 "command" [[:run-command arg]]
-                "file"    (let [name (last (str/split arg #"/"))]
-                            [[:buffer-create name]
-                             [:buffer-load-file arg]
-                             [:buffer-switch name]])
+                "file"    (let [name (last (str/split arg #"/"))
+                                existing (some #(= (:name %) name) (:buffers state))]
+                            (if existing
+                              [[:buffer-switch name]]
+                              [[:buffer-create name]
+                               [:buffer-switch name]
+                               [:buffer-load-file arg]]))
                 [[:message (str "Unknown hammock:// link: " target)]]))
 
             (or (str/starts-with? target "http://")
@@ -449,10 +521,13 @@
              [:point-forward 1]]
 
             :else
-            (let [name (last (str/split target #"/"))]
-              [[:buffer-create name]
-               [:buffer-load-file target]
-               [:buffer-switch name]])))
+            (let [name (last (str/split target #"/"))
+                  existing (some #(= (:name %) name) (:buffers state))]
+              (if existing
+                [[:buffer-switch name]]
+                [[:buffer-create name]
+                 [:buffer-switch name]
+                 [:buffer-load-file target]]))))
 
         ;; :none - not on a link, insert newline
         [[:insert "\n"] [:reset-target-col]]))))

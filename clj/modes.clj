@@ -23,7 +23,8 @@
    {:id 10 :name "Help"       :syntax "help"     :extensions [] :keymap nil}
    {:id 11 :name "Symbol-Browser" :syntax "none" :extensions [] :keymap "symbol-browser"}
    {:id 12 :name "Symbol-Detail"  :syntax "none" :extensions [] :keymap "symbol-detail"}
-   {:id 13 :name "Apropos"        :syntax "none" :extensions [] :keymap "apropos"}])
+   {:id 13 :name "Apropos"        :syntax "none" :extensions [] :keymap "apropos"}
+   {:id 14 :name "Git-Log"        :syntax "none" :extensions [] :keymap "git-log"}])
 
 ;; Detect mode from filename
 (defn detect-mode [filename]

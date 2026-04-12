@@ -13,6 +13,21 @@ void sci_shutdown(void);
 /* Evaluate a Clojure expression, returns result string (caller frees with free()) */
 char *sci_eval(const char *expr);
 
+/* Result of an interruptible eval. */
+typedef struct {
+    char *result;     /* eval result string (caller frees), NULL if cancelled */
+    bool cancelled;   /* true if user pressed C-g during evaluation */
+} SciEvalResult;
+
+/* Evaluate a Clojure expression in a forked child process so the user can
+ * cancel it with C-g. The parent polls both the result pipe and stdin; on C-g
+ * (byte 7 or ESC) the child is killed with SIGKILL. The parent's SCI isolate
+ * is untouched by the child, so editor state survives cancellation.
+ *
+ * While this function blocks, the caller must not expect any other input or
+ * display updates to happen — it owns stdin and draws its own minibuffer. */
+SciEvalResult sci_eval_interruptible(const char *expr);
+
 /* Check if the SCI interpreter is initialized and ready */
 bool sci_is_ready(void);
 

@@ -213,6 +213,19 @@ static void edn_escape_string(char *out, size_t outsize, const char *s);
 /* The kill ring used by commands; defined in command.c */
 extern KillRing kill_ring;
 
+/* Yank state — tracks the text last inserted by :yank so that :yank-pop can
+ * replace it with an older kill-ring entry (M-y). Any buffer mutation other
+ * than :yank or :yank-pop invalidates the state via yank_state_invalidate(),
+ * which mirrors Emacs' `last-command == yank` check. */
+static Buffer *yank_state_buf = NULL;
+static size_t yank_state_start = 0;
+static size_t yank_state_end = 0;
+static int yank_state_offset = 0;  /* offset from the newest kill-ring entry */
+
+void yank_state_invalidate(void) {
+    yank_state_buf = NULL;
+}
+
 static int execute_one_effect(EdnVal *effect) {
     if (!effect || effect->type != EDN_VECTOR || effect->vec.count < 1)
         return -1;
@@ -307,19 +320,24 @@ static int execute_one_effect(EdnVal *effect) {
     else if (strcmp(op, "insert") == 0) {
         if (buf->read_only) { message("Buffer is read-only"); return 0; }
         const char *text = edn_string_val(effect->vec.items[1]);
-        if (text) buffer_insert_string(buf, text, strlen(text));
+        if (text) {
+            buffer_insert_string(buf, text, strlen(text));
+            yank_state_invalidate();
+        }
     }
     else if (strcmp(op, "delete-forward") == 0) {
         if (buf->read_only) { message("Buffer is read-only"); return 0; }
         long long n = edn_int_val(effect->vec.items[1], 1);
         for (long long i = 0; i < n; i++)
             buffer_delete_forward(buf);
+        yank_state_invalidate();
     }
     else if (strcmp(op, "delete-backward") == 0) {
         if (buf->read_only) { message("Buffer is read-only"); return 0; }
         long long n = edn_int_val(effect->vec.items[1], 1);
         for (long long i = 0; i < n; i++)
             buffer_delete_backward(buf);
+        yank_state_invalidate();
     }
 
     /* Mark / region / kill */
@@ -341,6 +359,7 @@ static int execute_one_effect(EdnVal *effect) {
         buffer_delete_region(buf, start, end - start);
         buf->mark_active = false;
         free(text);
+        yank_state_invalidate();
     }
     else if (strcmp(op, "copy-region") == 0) {
         if (!buf->mark_active) { message("No mark set"); return 0; }
@@ -351,6 +370,7 @@ static int execute_one_effect(EdnVal *effect) {
         clipboard_copy(text);
         buf->mark_active = false;
         free(text);
+        yank_state_invalidate();
     }
     else if (strcmp(op, "yank") == 0) {
         if (buf->read_only) { message("Buffer is read-only"); return 0; }
@@ -363,9 +383,42 @@ static int execute_one_effect(EdnVal *effect) {
         } else {
             text = kr_top;
         }
-        if (text) buffer_insert_string(buf, text, strlen(text));
-        else message("Kill ring is empty");
+        if (text) {
+            size_t start = buf->point;
+            size_t tlen = strlen(text);
+            buffer_insert_string(buf, text, tlen);
+            yank_state_buf = buf;
+            yank_state_start = start;
+            yank_state_end = start + tlen;
+            yank_state_offset = 0;
+        } else {
+            message("Kill ring is empty");
+        }
         free(clip);
+    }
+    else if (strcmp(op, "yank-pop") == 0) {
+        if (buf->read_only) { message("Buffer is read-only"); return 0; }
+        if (yank_state_buf != buf || buf->point != yank_state_end) {
+            message("Previous command was not a yank");
+            return 0;
+        }
+        if (kill_ring.count == 0) {
+            message("Kill ring is empty");
+            return 0;
+        }
+        /* Replace the last-yanked text with the next-older kill-ring entry. */
+        size_t len = yank_state_end - yank_state_start;
+        buf->point = yank_state_start;
+        buffer_delete_region(buf, yank_state_start, len);
+        yank_state_offset = (yank_state_offset + 1) % kill_ring.count;
+        const char *text = kill_ring_nth(&kill_ring, yank_state_offset);
+        if (text) {
+            size_t tlen = strlen(text);
+            buffer_insert_string(buf, text, tlen);
+            yank_state_end = yank_state_start + tlen;
+        } else {
+            yank_state_end = yank_state_start;
+        }
     }
     else if (strcmp(op, "kill-line") == 0) {
         if (buf->read_only) { message("Buffer is read-only"); return 0; }
@@ -377,6 +430,7 @@ static int execute_one_effect(EdnVal *effect) {
             clipboard_copy(text);
             buffer_delete_region(buf, buf->point, end - buf->point);
             free(text);
+            yank_state_invalidate();
         }
     }
     else if (strcmp(op, "clipboard-copy") == 0) {
@@ -406,6 +460,7 @@ static int execute_one_effect(EdnVal *effect) {
         }
         undo_entry_free(e);
         buf->undo_inhibit = false;
+        yank_state_invalidate();
     }
 
     /* Buffer management */
@@ -432,6 +487,7 @@ static int execute_one_effect(EdnVal *effect) {
                     size_t new_len = buffer_length(target);
                     target->point = saved <= new_len ? saved : new_len;
                 }
+                yank_state_invalidate();
             }
         }
     }
@@ -442,6 +498,7 @@ static int execute_one_effect(EdnVal *effect) {
             if (b) {
                 current_buffer = b;
                 win->buffer = b;
+                yank_state_invalidate();
             } else {
                 message("No buffer named %s", name);
             }
@@ -455,6 +512,7 @@ static int execute_one_effect(EdnVal *effect) {
                 message("(New file)");
             }
             buffer_set_mode(buf, mode_detect(path));
+            yank_state_invalidate();
         }
     }
     else if (strcmp(op, "buffer-save") == 0) {
@@ -475,6 +533,7 @@ static int execute_one_effect(EdnVal *effect) {
             /* Clear buffer and insert new contents */
             buffer_delete_region(buf, 0, buffer_length(buf));
             buffer_insert_string(buf, text, strlen(text));
+            yank_state_invalidate();
         }
     }
     else if (strcmp(op, "buffer-set-read-only") == 0) {

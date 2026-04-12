@@ -59,28 +59,20 @@ Each keystroke is dispatched through the keymap. Hot-path commands (cursor movem
 Users can modify editor behavior live via `C-j` in the scratch buffer.
 
 ## TODO 
-- [ ] bug: fix [[bidirection]] links so that the filename matches the target
-- [ ] bug: `C-j` `sci_eval error: ` forward to `*Messages*` buffer
 - [ ] feature: rattles spinner for long-running external process: [rattles](https://github.com/vyfor/rattles)
-- [ ] feature: git mode view git log
 - [ ] feature: in markdown mode, tables are displayed with padding and look rectangular (like org-mode)
 - [ ] feature: render LaTeX expressions between dollar signs using [LaTeX-2-Unicode](https ://github.com/tlehman/latex2unicode) library
-- [ ] feature: M-<backspace> deletes whole word
 - [ ] feature: in *scratch* buffer, format all the outputted source code 
 - [ ] feature: tab and code indenting correctly
 - [ ] feature: add mermaidjs tui-rendering for markdown mode
-- [ ] feature: add git fetch/push/pull to git mode
-- [ ] feature: make q quit the git mode main buffer
 - [ ] feature: interactive vs non-interactive fns
 - [ ] feature: LSP support for other languages
 - [ ] feature: vim-mode
 - [ ] feature: Make a SQLite and CSV grid editor
-- [ ] feature: add roam/obsidian style `[[ ]]` bidirectional linking for markdown
-- [ ] feature: move git/markdown commands fully to Clojure (add query effects for buffer content access)
-- [ ] feature: move isearch to Clojure (like Emacs isearch.el)
+- [ ] feature: move git/markdown commands fully to Clojure (add query effects for buffer content access)j
 - [ ] feature: Add comprehensive list of features to README.md when the above tasks are done
-- [ ] feature: kill ring
 - [ ] tests: performance tests for loading large files (consider a related approach to https://arxiv.org/abs/2004.02504)
 
 ## Dependencies
 - [libsci](https://github.com/babashka/sci) Configurable Clojure/Script interpreter suitable for scripting and Clojure DSLs
+

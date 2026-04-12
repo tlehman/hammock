@@ -42,6 +42,19 @@
               (= key-name "/") [(int \/) mod-val]
               (= key-name "_") [(int \_) mod-val]
               (= key-name " ") [(int \space) mod-val]
+              ;; Special keys with a modifier (e.g. "M-Backspace", "C-Up")
+              (= key-name "Backspace") [HK_BACKSPACE mod-val]
+              (= key-name "Delete")    [HK_DELETE mod-val]
+              (= key-name "Up")        [HK_UP mod-val]
+              (= key-name "Down")      [HK_DOWN mod-val]
+              (= key-name "Left")      [HK_LEFT mod-val]
+              (= key-name "Right")     [HK_RIGHT mod-val]
+              (= key-name "Home")      [HK_HOME mod-val]
+              (= key-name "End")       [HK_END mod-val]
+              (= key-name "PgUp")      [HK_PGUP mod-val]
+              (= key-name "PgDn")      [HK_PGDN mod-val]
+              (= key-name "Tab")       [HK_TAB mod-val]
+              (= key-name "Enter")     [HK_ENTER mod-val]
               :else [(int (first key-name)) mod-val]))))
 
       ;; Special key names
@@ -109,6 +122,8 @@
    ["C-w" "kill-region"]
    ["M-w" "kill-ring-save"]
    ["C-y" "yank"]
+   ["M-y" "yank-pop"]
+   ["M-Backspace" "backward-kill-word"]
 
    ;; Mark
    ["C- " "set-mark"]
@@ -186,8 +201,14 @@
                  ["q"     "git-quit"]
                  ["g"     "git-refresh"]
                  ["d"     "git-diff"]
+                 ["l"     "git-log"]
+                 ["f"     "git-fetch"]
+                 ["F"     "git-pull"]
+                 ["P"     "git-push"]
                  ["Tab"   "git-toggle-section"]
                  ["Enter" "git-visit-file"]]
+   "git-log"    [["g"     "git-log"]
+                 ["q"     "git-log-quit"]]
    "clojure"      []
    "diff"         [["q"     "diff-quit"]]
    "grep"         [["Enter" "grep-visit"]

@@ -193,8 +193,15 @@ public class SciLib {
             String combined = printed.isEmpty() ? resultStr : (printed + resultStr);
             return CTypeConversion.toCString(combined).get();
         } catch (Exception e) {
-            System.err.println("sci_eval error: " + e.getMessage());
-            return CTypeConversion.toCString("nil").get();
+            /* Return the error text to the caller instead of printing it to
+             * stderr, which would either (a) corrupt the ncurses display
+             * during interactive use or (b) be silently discarded after the
+             * child in sci_eval_interruptible closes stderr. The C side's
+             * sci_result_is_error() detects the "sci_eval error:" prefix
+             * and routes the text to *Messages* + minibuffer. */
+            String msg = e.getMessage();
+            if (msg == null) msg = e.getClass().getName();
+            return CTypeConversion.toCString("sci_eval error: " + msg).get();
         }
     }
 

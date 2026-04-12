@@ -60,6 +60,15 @@ const char *kill_ring_top(KillRing *kr) {
     return kr->entries[idx];
 }
 
+const char *kill_ring_nth(KillRing *kr, int offset) {
+    if (kr->count == 0) return NULL;
+    /* Normalize offset into [0, count). Negative offsets wrap. */
+    int n = kr->count;
+    int off = ((offset % n) + n) % n;
+    int idx = (kr->head - 1 - off + KILL_RING_SIZE * 2) % KILL_RING_SIZE;
+    return kr->entries[idx];
+}
+
 void kill_ring_free(KillRing *kr) {
     for (int i = 0; i < KILL_RING_SIZE; i++) {
         free(kr->entries[i]);

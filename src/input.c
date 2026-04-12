@@ -59,6 +59,84 @@ static int try_parse_sgr(const unsigned char *buf, int len) {
     return end + 1;
 }
 
+/* Try to parse a VT100/xterm escape sequence for a special key.
+ * Returns bytes consumed, or 0 if no match.
+ * On match, fills *out with the corresponding KeyEvent.
+ *
+ * This is needed because input_read() intercepts raw stdin bytes (for SGR
+ * mouse support), then pushes them into ncurses via ungetch(). ncurses does
+ * not reassemble escape sequences from ungetch'd bytes, so arrow keys like
+ * \033[A would otherwise be decoded as Meta-[ followed by a stray 'A'. */
+static int try_parse_vt100(const unsigned char *buf, int len, KeyEvent *out) {
+    if (len < 3 || buf[0] != 0x1B) return 0;
+
+    /* SS3 sequences: \033O<letter>. Emitted by terminals in "application
+     * cursor keys" mode (enabled by ncurses' keypad() or by programs like
+     * tmux). Covers arrows, Home/End, and F1..F4. */
+    if (buf[1] == 'O') {
+        switch (buf[2]) {
+            case 'A': out->key = HK_UP;    out->modifiers = 0; return 3;
+            case 'B': out->key = HK_DOWN;  out->modifiers = 0; return 3;
+            case 'C': out->key = HK_RIGHT; out->modifiers = 0; return 3;
+            case 'D': out->key = HK_LEFT;  out->modifiers = 0; return 3;
+            case 'H': out->key = HK_HOME;  out->modifiers = 0; return 3;
+            case 'F': out->key = HK_END;   out->modifiers = 0; return 3;
+            case 'P': out->key = HK_F1;    out->modifiers = 0; return 3;
+            /* F2..F4 could be added here if bound */
+            default:  return 0;
+        }
+    }
+
+    if (buf[1] != '[') return 0;
+
+    /* CSI sequences with a single final letter: \033[<letter> */
+    switch (buf[2]) {
+        case 'A': out->key = HK_UP;        out->modifiers = 0; return 3;
+        case 'B': out->key = HK_DOWN;      out->modifiers = 0; return 3;
+        case 'C': out->key = HK_RIGHT;     out->modifiers = 0; return 3;
+        case 'D': out->key = HK_LEFT;      out->modifiers = 0; return 3;
+        case 'H': out->key = HK_HOME;      out->modifiers = 0; return 3;
+        case 'F': out->key = HK_END;       out->modifiers = 0; return 3;
+        case 'Z': out->key = HK_SHIFT_TAB; out->modifiers = 0; return 3;
+    }
+
+    /* Tilde sequences: \033[<digit>~ */
+    if (len >= 4 && buf[3] == '~') {
+        switch (buf[2]) {
+            case '3': out->key = HK_DELETE; out->modifiers = 0; return 4;
+            case '5': out->key = HK_PGUP;   out->modifiers = 0; return 4;
+            case '6': out->key = HK_PGDN;   out->modifiers = 0; return 4;
+        }
+    }
+
+    /* Modified arrow/home/end: \033[1;<mod><letter>
+     * mod: 2=Shift, 3=Meta, 4=Shift+Meta, 5=Ctrl, 6=Shift+Ctrl, 7=Ctrl+Meta, 8=Shift+Ctrl+Meta */
+    if (len >= 6 && buf[2] == '1' && buf[3] == ';') {
+        int mods = 0;
+        switch (buf[4]) {
+            case '3': mods = MOD_META; break;
+            case '5': mods = MOD_CTRL; break;
+            case '7': mods = MOD_CTRL | MOD_META; break;
+            default:  return 0;
+        }
+        int key = 0;
+        switch (buf[5]) {
+            case 'A': key = HK_UP;    break;
+            case 'B': key = HK_DOWN;  break;
+            case 'C': key = HK_RIGHT; break;
+            case 'D': key = HK_LEFT;  break;
+            case 'H': key = HK_HOME;  break;
+            case 'F': key = HK_END;   break;
+            default:  return 0;
+        }
+        out->key = key;
+        out->modifiers = mods;
+        return 6;
+    }
+
+    return 0;
+}
+
 void input_init(void) {
     /* Don't use mousemask() — macOS ncurses can't decode SGR mouse events.
      * We parse SGR sequences ourselves from raw stdin reads. */
@@ -111,6 +189,20 @@ KeyEvent input_read(void) {
         return ev;
     }
 
+    /* Try VT100/xterm escape sequence decoding (arrow keys, Home/End,
+     * Delete, PgUp/PgDn, F1, Meta/Ctrl+arrows). We must handle these
+     * ourselves because ncurses' keypad() decoder does not run over
+     * ungetch'd bytes — it only fires on direct terminal input. */
+    KeyEvent vt_ev = {0, 0};
+    int vt_consumed = try_parse_vt100(raw, (int)n, &vt_ev);
+    if (vt_consumed > 0) {
+        /* Push any bytes after the matched sequence back to ncurses so
+         * a burst of input (e.g. arrow followed by a letter) isn't lost. */
+        for (ssize_t i = n - 1; i >= vt_consumed; i--)
+            ungetch(raw[i]);
+        return vt_ev;
+    }
+
     /* No SGR mouse — push all bytes into ncurses input buffer */
     for (ssize_t i = n - 1; i >= 0; i--)
         ungetch(raw[i]);
@@ -146,9 +238,10 @@ KeyEvent input_read(void) {
             /* Byte 8 (^H) falls through to the default case so it maps to
              * C-h; modern terminals send 127 or KEY_BACKSPACE for the
              * Backspace key, so this keeps Backspace working while freeing
-             * C-h to be a prefix. */
+             * C-h to be a prefix. MOD_META is preserved so M-Backspace
+             * (backward-kill-word) can be distinguished from plain
+             * Backspace. */
             ev.key = HK_BACKSPACE;
-            ev.modifiers &= ~MOD_META;  /* backspace, not M-backspace usually */
             break;
         case KEY_DC:
             ev.key = HK_DELETE;

@@ -47,4 +47,9 @@ char *state_snapshot_edn(void);
 /* Push state snapshot to Clojure *editor* atom. */
 void state_push_snapshot(void);
 
+/* Drop the yank state used by :yank-pop. Call from any command that mutates
+ * the buffer or kill ring between a :yank and the next :yank-pop, so M-y
+ * says "Previous command was not a yank" just like Emacs. */
+void yank_state_invalidate(void);
+
 #endif

@@ -38,6 +38,7 @@ static void self_insert(int ch) {
     char c = (char)ch;
     buffer_insert_char(current_buffer, c);
     current_window->target_col = -1;
+    yank_state_invalidate();
     need_redisplay = true;
 }
 

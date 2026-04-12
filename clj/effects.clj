@@ -34,6 +34,7 @@
 (defn kill-region []               [:kill-region])
 (defn copy-region []               [:copy-region])
 (defn yank []                      [:yank])
+(defn yank-pop []                  [:yank-pop])
 (defn kill-line []                 [:kill-line])
 
 ;; Undo
