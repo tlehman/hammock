@@ -22,7 +22,7 @@ typedef struct Buffer {
     bool modified;
     bool read_only;
 
-    int major_mode;     /* mode enum, set later */
+    const char *mode_name;  /* interned mode name, e.g. "Clojure" */
 
     UndoList undo;
     bool undo_inhibit;  /* suppress undo recording during undo */

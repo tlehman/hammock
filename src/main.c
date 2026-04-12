@@ -625,7 +625,7 @@ int main(int argc, char *argv[]) {
         buffer_insert_string(scratch, welcome, strlen(welcome));
         scratch->point = buffer_length(scratch);
         scratch->modified = false;
-        buffer_set_mode(scratch, MODE_CLOJURE);
+        buffer_set_mode(scratch, "Clojure");
     }
     (void)scratch;
 
@@ -639,7 +639,7 @@ int main(int argc, char *argv[]) {
         const char *name = strrchr(path, '/');
         name = name ? name + 1 : path;
         buf = buffer_create(name);
-        MajorModeID detected = mode_detect(path);
+        const char *detected = mode_detect(path);
         if (!buffer_load_file(buf, path)) {
             buf->filename = hstrdup(path);
             message("(New file)");
@@ -703,18 +703,37 @@ int main(int argc, char *argv[]) {
             need_redisplay = false;
         }
 
-        /* Check if Clojure config atoms changed (live reload) */
+        /* Snapshot protocol: check if Clojure config atoms changed.
+         * The global *config-version* is polled via a single cheap C→Java
+         * call. Only when it bumps do we fetch per-domain version counters
+         * to determine WHICH domains need rebuilding. */
         if (clj_ok) {
             static long long last_version = 0;
+            static long long last_keymaps = 0;
+            static long long last_modes = 0;
             long long ver = sci_get_state_version();
             if (ver > last_version) {
                 last_version = ver;
-                /* Re-export keybindings */
-                char *kb = sci_eval("(hammock.keybindings/export)");
-                if (kb) { keybindings_load_edn(kb); free(kb); }
-                /* Re-export modes */
-                char *md = sci_eval("(hammock.modes/export)");
-                if (md) { modes_load_edn(md); free(md); }
+                /* Fetch per-domain version counters. */
+                char *dv = sci_eval("(str (:keymaps @hammock.state/*config-versions*)"
+                                    " \" \" (:modes @hammock.state/*config-versions*))");
+                long long dom_km = 0, dom_md = 0;
+                if (dv) { sscanf(dv, "%lld %lld", &dom_km, &dom_md); free(dv); }
+
+                if (dom_km > last_keymaps) {
+                    uint64_t t0 = perf_now_ns();
+                    last_keymaps = dom_km;
+                    char *kb = sci_eval("(hammock.keybindings/export)");
+                    if (kb) { keybindings_load_edn(kb); free(kb); }
+                    perf_record("snapshot-rebuild:keymaps", perf_now_ns() - t0);
+                }
+                if (dom_md > last_modes) {
+                    uint64_t t0 = perf_now_ns();
+                    last_modes = dom_md;
+                    char *md = sci_eval("(hammock.modes/export)");
+                    if (md) { modes_load_edn(md); free(md); }
+                    perf_record("snapshot-rebuild:modes", perf_now_ns() - t0);
+                }
                 need_redisplay = true;
             }
         }
@@ -752,13 +771,13 @@ int main(int argc, char *argv[]) {
             cmd = keymap_lookup(pending_keymap, ev.key, ev.modifiers, &submap);
         } else {
             /* Try mode-specific keymap first */
-            MajorModeID mode_id = (MajorModeID)current_buffer->major_mode;
-            if (mode_id >= 0 && mode_id < MODE_COUNT && major_modes[mode_id].keymap) {
+            Keymap *mode_km = mode_keymap_for(current_buffer->mode_name);
+            if (mode_km) {
                 /* In writable buffers, skip bare printable-char mode bindings
                  * so they self-insert instead of triggering navigation commands */
                 bool is_bare_printable = (ev.modifiers == 0 && ev.key >= 32 && ev.key < 127);
                 if (!(is_bare_printable && !current_buffer->read_only)) {
-                    cmd = keymap_lookup(major_modes[mode_id].keymap, ev.key, ev.modifiers, &submap);
+                    cmd = keymap_lookup(mode_km, ev.key, ev.modifiers, &submap);
                 }
             }
             /* Fall back to global keymap */

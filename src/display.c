@@ -215,7 +215,7 @@ void display_refresh_window(Window *win, bool is_current) {
     }
 
     /* Get syntax language for this buffer */
-    SyntaxLang lang = mode_syntax((MajorModeID)buf->major_mode);
+    SyntaxLang lang = mode_syntax_for(buf->mode_name);
 
     /* We need to compute syntax state from the beginning of the file up to top_line.
      * For efficiency, just compute from start for now (fine for normal-sized files). */
@@ -450,7 +450,7 @@ void display_modeline(Window *win, bool is_current) {
              buf->read_only ? "%%" : "--",
              buf->name,
              l + 1, c,
-             mode_name((MajorModeID)buf->major_mode));
+             buf->mode_name ? buf->mode_name : "Fundamental");
 
     int len = (int)strlen(line);
     move(modeline_y, win->x);

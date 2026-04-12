@@ -46,7 +46,7 @@ void shell_start(void) {
     char name[64];
     snprintf(name, sizeof(name), "*shell-%d*", shell_count);
     Buffer *buf = buffer_create(name);
-    buf->major_mode = 6;  /* MODE_SHELL */
+    buf->mode_name = "Shell";
 
     shells[shell_count].pid = pid;
     shells[shell_count].master_fd = master_fd;

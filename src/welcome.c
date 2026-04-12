@@ -47,7 +47,7 @@ static Buffer *build_welcome_buffer(void) {
     buf->point = 0;
     buf->modified = false;
     buf->read_only = true;
-    buffer_set_mode(buf, MODE_MARKDOWN);
+    buffer_set_mode(buf, "Markdown");
 
     return buf;
 }

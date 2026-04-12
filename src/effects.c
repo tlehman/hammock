@@ -486,12 +486,8 @@ static int execute_one_effect(EdnVal *effect) {
     else if (strcmp(op, "buffer-set-mode") == 0) {
         const char *mname = edn_string_val(effect->vec.items[1]);
         if (mname) {
-            for (int i = 0; i < MODE_COUNT; i++) {
-                if (major_modes[i].name && strcasecmp(major_modes[i].name, mname) == 0) {
-                    buffer_set_mode(buf, (MajorModeID)i);
-                    break;
-                }
-            }
+            MajorMode *m = mode_find(mname);
+            if (m) buffer_set_mode(buf, m->name);
         }
     }
     else if (strcmp(op, "buffer-set-filename") == 0) {
@@ -795,7 +791,7 @@ char *state_snapshot_edn(void) {
             edn_escape_string(bfn_esc, sizeof(bfn_esc), b->filename);
         else
             snprintf(bfn_esc, sizeof(bfn_esc), "nil");
-        const char *bmname = mode_name((MajorModeID)b->major_mode);
+        const char *bmname = b->mode_name ? b->mode_name : "Fundamental";
         char bmode_esc[128];
         edn_escape_string(bmode_esc, sizeof(bmode_esc), bmname);
 
@@ -834,7 +830,7 @@ char *state_snapshot_edn(void) {
     else
         snprintf(filename_escaped, sizeof(filename_escaped), "nil");
 
-    const char *mname = mode_name((MajorModeID)buf->major_mode);
+    const char *mname = buf->mode_name ? buf->mode_name : "Fundamental";
     char mode_escaped[128];
     edn_escape_string(mode_escaped, sizeof(mode_escaped), mname);
 

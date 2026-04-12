@@ -796,7 +796,7 @@ static void cmd_eval_last_sexp(void) {
         Buffer *scratch = buffer_find("*scratch*");
         if (!scratch) {
             scratch = buffer_create("*scratch*");
-            buffer_set_mode(scratch, MODE_CLOJURE);
+            buffer_set_mode(scratch, "Clojure");
         }
         //TODO try inserting at point (leave commented)
         //scratch->point = buffer_length(scratch);
@@ -884,11 +884,9 @@ static char *word_at_point(void) {
     Buffer *buf = current_buffer;
     size_t pos = buf->point;
     size_t len = buffer_length(buf);
-    MajorModeID mode = (MajorModeID)buf->major_mode;
-
     /* Pick the right character test for the mode */
     bool (*is_word)(char) = is_c_ident;
-    if (mode == MODE_CLOJURE)
+    if (buf->mode_name && strcmp(buf->mode_name, "Clojure") == 0)
         is_word = clojure_is_symbol_char;
 
     /* If point is on a non-word char, try one position back */
@@ -1123,10 +1121,10 @@ static void cmd_find_definition(void) {
     char *symbol = word_at_point();
     if (!symbol) { message("No symbol at point"); return; }
 
-    MajorModeID mode = (MajorModeID)current_buffer->major_mode;
-    if (mode == MODE_C)
+    const char *mode = current_buffer->mode_name;
+    if (mode && strcmp(mode, "C") == 0)
         find_definition_c(symbol);
-    else if (mode == MODE_CLOJURE)
+    else if (mode && strcmp(mode, "Clojure") == 0)
         find_definition_clojure(symbol);
     else
         find_definition_any(symbol);
@@ -1162,7 +1160,7 @@ static void grep_populate(const char *pattern) {
             buffer_delete_forward(buf);
     }
 
-    buffer_set_mode(buf, MODE_GREP);
+    buffer_set_mode(buf, "Grep");
 
     /* Header */
     char header[512];

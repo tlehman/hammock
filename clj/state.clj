@@ -36,18 +36,32 @@
 ;; Populated by hammock.modes at startup.
 (defonce *modes* (atom {}))
 
-;; Version counter: incremented by watches when any config atom changes.
+;; Global version counter: incremented by watches when any config atom changes.
 ;; C polls this via sci_get_state_version() to detect when re-export is needed.
+;; This is the fast-path check — one C→Java call per main loop iteration.
 (defonce *config-version* (atom 0))
 
+;; Per-domain version counters. When the global *config-version* bumps,
+;; C fetches this map to determine which domains changed and rebuilds
+;; only those snapshots.  Keys: :keymaps :modes :commands :windows
+(defonce *config-versions* (atom {:keymaps 0 :modes 0 :commands 0 :windows 0}))
+
 (defn install-watches!
-  "Set up watches on config atoms. Called by C after all namespaces are loaded."
+  "Set up watches on config atoms. Called by C after all namespaces are loaded.
+   Each watch bumps both the global *config-version* (fast poll) and its own
+   domain counter in *config-versions* (selective rebuild)."
   []
   (add-watch *editor* :version-bump
     (fn [_ _ _ _] (swap! *config-version* inc)))
   (add-watch *keybindings* :version-bump
-    (fn [_ _ _ _] (swap! *config-version* inc)))
+    (fn [_ _ _ _]
+      (swap! *config-version* inc)
+      (swap! *config-versions* update :keymaps inc)))
   (add-watch *commands* :version-bump
-    (fn [_ _ _ _] (swap! *config-version* inc)))
+    (fn [_ _ _ _]
+      (swap! *config-version* inc)
+      (swap! *config-versions* update :commands inc)))
   (add-watch *modes* :version-bump
-    (fn [_ _ _ _] (swap! *config-version* inc))))
+    (fn [_ _ _ _]
+      (swap! *config-version* inc)
+      (swap! *config-versions* update :modes inc))))
