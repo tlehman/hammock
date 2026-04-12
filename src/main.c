@@ -12,11 +12,15 @@
 #include "welcome.h"
 #include "effects.h"
 #include "util.h"
+#include "perf.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
 #include <locale.h>
+#include <time.h>
+#include <unistd.h>
+#include <sys/stat.h>
 #include <ncurses.h>
 
 static volatile sig_atomic_t got_sigwinch = 0;
@@ -279,21 +283,215 @@ static int run_headless_eval(const char *expr) {
     return 0;
 }
 
+/* Headless bench runner. Reads an EDN script that is a flat vector of
+ * directive sub-vectors and times `command_dispatch` for each [:case ...].
+ *
+ * Script shape (the EDN parser does not support maps):
+ *
+ *   [[:fixture "perf/fixtures/medium.txt"]
+ *    [:warmup 100]
+ *    [:iterations 1000]
+ *    [:case "forward-char" "forward-char"]
+ *    [:case "next-line"    "next-line"]]
+ *
+ * The fixture is optional; without it a synthetic scratch buffer is used.
+ * Warmup iterations are discarded; timed iterations feed perf_record under
+ * the case label. The run writes one EDN file to perf/runs/. */
+static int run_bench(const char *script_path) {
+    /* Minimal subsystem init; no ncurses. */
+    commands_init();
+    shell_commands_init();
+    messages_buffer = buffer_create("*Messages*");
+
+    if (!sci_init()) {
+        fprintf(stderr, "hammock: could not initialize SCI interpreter\n");
+        return 1;
+    }
+
+    /* Load the Clojure layer via the loadup.clj manifest. */
+    free(sci_load_file("clj/loadup.clj"));
+    char *files_edn = sci_eval("hammock.loadup/files");
+    if (files_edn) {
+        size_t consumed = 0;
+        EdnVal *root = edn_parse(files_edn, strlen(files_edn), &consumed);
+        if (root && root->type == EDN_VECTOR) {
+            for (int i = 0; i < root->vec.count; i++) {
+                EdnVal *item = root->vec.items[i];
+                if (item && item->type == EDN_STRING && item->str) {
+                    free(sci_load_file(item->str));
+                }
+            }
+        }
+        edn_free(root);
+        free(files_edn);
+    }
+    free(sci_eval("(hammock.state/install-watches!)"));
+
+    /* Read script into memory. */
+    FILE *fp = fopen(script_path, "r");
+    if (!fp) {
+        fprintf(stderr, "hammock: cannot read %s\n", script_path);
+        return 1;
+    }
+    fseek(fp, 0, SEEK_END);
+    long script_len = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    char *script = malloc((size_t)script_len + 1);
+    if (!script) { fclose(fp); return 1; }
+    size_t read_n = fread(script, 1, (size_t)script_len, fp);
+    script[read_n] = '\0';
+    fclose(fp);
+
+    size_t consumed = 0;
+    EdnVal *script_edn = edn_parse(script, read_n, &consumed);
+    if (!script_edn || script_edn->type != EDN_VECTOR) {
+        fprintf(stderr, "hammock: script must be an EDN vector of directives\n");
+        if (script_edn) edn_free(script_edn);
+        free(script);
+        return 1;
+    }
+
+    /* First pass: extract :fixture, :warmup, :iterations. */
+    const char *fixture_path = NULL;
+    long long warmup_n = 100;
+    long long iter_n   = 1000;
+    for (int i = 0; i < script_edn->vec.count; i++) {
+        EdnVal *item = script_edn->vec.items[i];
+        if (!item || item->type != EDN_VECTOR || item->vec.count < 2) continue;
+        EdnVal *head = item->vec.items[0];
+        if (!head || head->type != EDN_KEYWORD) continue;
+        EdnVal *val = item->vec.items[1];
+        if (!val) continue;
+        if (strcmp(head->str, "fixture") == 0 && val->type == EDN_STRING) {
+            fixture_path = val->str;
+        } else if (strcmp(head->str, "warmup") == 0 && val->type == EDN_INT) {
+            warmup_n = val->num;
+        } else if (strcmp(head->str, "iterations") == 0 && val->type == EDN_INT) {
+            iter_n = val->num;
+        }
+    }
+
+    /* Load fixture into a buffer (or synthesize one). */
+    Buffer *buf = buffer_create("*bench*");
+    if (fixture_path) {
+        if (!buffer_load_file(buf, fixture_path)) {
+            fprintf(stderr, "hammock: cannot load fixture %s\n", fixture_path);
+            edn_free(script_edn);
+            free(script);
+            return 1;
+        }
+    } else {
+        const char *filler = "abcdefghijklmnopqrstuvwxyz\n";
+        for (int i = 0; i < 100; i++)
+            buffer_insert_string(buf, filler, strlen(filler));
+        buf->point = 0;
+        buf->modified = false;
+    }
+    current_buffer = buf;
+    /* Fake window with conventional 80x24 geometry. */
+    Window *win = window_create(buf, 0, 0, 24, 80);
+    current_window = win;
+
+    printf("hammock perf bench: fixture=%s warmup=%lld iterations=%lld\n",
+           fixture_path ? fixture_path : "(synthetic)",
+           warmup_n, iter_n);
+
+    perf_init(PERF_BENCH, NULL);
+    bool sci_ready = sci_is_ready();
+
+    /* Second pass: run each :case directive. */
+    int case_count = 0;
+    for (int i = 0; i < script_edn->vec.count; i++) {
+        EdnVal *item = script_edn->vec.items[i];
+        if (!item || item->type != EDN_VECTOR || item->vec.count < 3) continue;
+        EdnVal *head = item->vec.items[0];
+        if (!head || head->type != EDN_KEYWORD || strcmp(head->str, "case") != 0)
+            continue;
+        EdnVal *label_v = item->vec.items[1];
+        EdnVal *cmd_v   = item->vec.items[2];
+        if (!label_v || label_v->type != EDN_STRING) continue;
+        if (!cmd_v   || cmd_v->type   != EDN_STRING) continue;
+
+        const char *case_label = label_v->str;
+        const char *case_cmd   = cmd_v->str;
+
+        /* Reset state for reproducibility */
+        buf->point = 0;
+        current_window->target_col = -1;
+
+        /* Warmup (discarded) */
+        for (long long w = 0; w < warmup_n; w++)
+            command_dispatch(case_cmd, sci_ready);
+
+        /* Reset again so timed iterations start from the same state */
+        buf->point = 0;
+        current_window->target_col = -1;
+
+        /* Timed iterations */
+        for (long long it = 0; it < iter_n; it++) {
+            uint64_t t0 = perf_now_ns();
+            command_dispatch(case_cmd, sci_ready);
+            perf_record(case_label, perf_now_ns() - t0);
+        }
+
+        case_count++;
+        printf("  case %-32s (%s): %lld iters\n",
+               case_label, case_cmd, iter_n);
+    }
+
+    if (case_count == 0) {
+        fprintf(stderr, "hammock: script has no :case directives\n");
+        edn_free(script_edn);
+        free(script);
+        return 1;
+    }
+
+    /* Build output path perf/runs/<ts>-<host>.edn. */
+    mkdir("perf", 0755);
+    mkdir("perf/runs", 0755);
+    time_t now = time(NULL);
+    struct tm tm;
+    gmtime_r(&now, &tm);
+    char ts[32];
+    strftime(ts, sizeof(ts), "%Y-%m-%dT%H-%M-%SZ", &tm);
+    char host[128] = "unknown";
+    gethostname(host, sizeof(host));
+    host[sizeof(host)-1] = '\0';
+    for (char *p = host; *p; p++) if (*p == '.') { *p = '\0'; break; }
+    char out_path[512];
+    snprintf(out_path, sizeof(out_path),
+             "perf/runs/%s-%s.edn", ts, host);
+
+    perf_write_bench_edn(out_path);
+    printf("hammock perf bench: wrote %s\n", out_path);
+
+    perf_shutdown();
+    edn_free(script_edn);
+    free(script);
+    sci_shutdown();
+    return 0;
+}
+
 int main(int argc, char *argv[]) {
     /* Enable UTF-8 output so ncurses renders multi-byte characters
      * (needed for inline math Unicode substitutions). */
     setlocale(LC_ALL, "");
 
     /* Command-line flags:
-     *   -e EXPR  headless Clojure eval (prints result, exits)
-     *   -v       print version and exit
-     *   -h       print usage and exit
+     *   -e EXPR       headless Clojure eval (prints result, exits)
+     *   --bench PATH  run a perf benchmark script and exit
+     *   -v            print version and exit
+     *   -h            print usage and exit
      * A bare filename argument is opened in the editor. */
-    const char *eval_expr = NULL;
+    const char *eval_expr    = NULL;
+    const char *bench_script = NULL;
     int file_arg_idx = 0;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-e") == 0 && i + 1 < argc) {
             eval_expr = argv[i + 1];
+            i++;
+        } else if (strcmp(argv[i], "--bench") == 0 && i + 1 < argc) {
+            bench_script = argv[i + 1];
             i++;
         } else if (strcmp(argv[i], "-v") == 0 ||
                    strcmp(argv[i], "--version") == 0) {
@@ -304,9 +502,13 @@ int main(int argc, char *argv[]) {
             printf("Usage: %s [options] [file]\n"
                    "\n"
                    "Options:\n"
-                   "  -e EXPR      evaluate a Clojure expression and exit\n"
+                   "  -e EXPR        evaluate a Clojure expression and exit\n"
+                   "  --bench PATH   run a perf benchmark script and exit\n"
                    "  -v, --version  print version and exit\n"
                    "  -h, --help     print this help and exit\n"
+                   "\n"
+                   "Environment:\n"
+                   "  HAMMOCK_PERF=PATH  log per-command timings to PATH\n"
                    "\n"
                    "With no file, opens the *Hammock* welcome buffer.\n",
                    argv[0]);
@@ -315,7 +517,15 @@ int main(int argc, char *argv[]) {
             file_arg_idx = i;
         }
     }
-    if (eval_expr) return run_headless_eval(eval_expr);
+    if (eval_expr)    return run_headless_eval(eval_expr);
+    if (bench_script) return run_bench(bench_script);
+
+    /* Enable ambient perf logging if HAMMOCK_PERF is set. */
+    const char *perf_env = getenv("HAMMOCK_PERF");
+    if (perf_env && perf_env[0]) {
+        perf_init(PERF_AMBIENT, perf_env);
+        atexit(perf_shutdown);
+    }
 
     /* Initialize C subsystems */
     commands_init();

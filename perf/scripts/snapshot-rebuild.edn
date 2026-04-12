@@ -1,0 +1,10 @@
+;; Hammock perf: snapshot rebuild latency (v0.2.2 stub).
+;;
+;; Placeholder. v0.2.1 has no snapshot rebuilder yet; this script exists
+;; so the file layout matches the v0.2.2 plan. After the window/keymap
+;; flips in v0.2.2 it will `swap!` `*keybindings*` / `*windows*` and time
+;; the rebuild from the `:keymaps` / `:windows` version bump.
+[[:fixture "perf/fixtures/small.txt"]
+ [:warmup 10]
+ [:iterations 10]
+ [:case "forward-char" "forward-char"]]

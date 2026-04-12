@@ -1,0 +1,11 @@
+{:version "0.2.1"
+ :host "bender"
+ :mode :bench
+ :timestamp "2026-04-12T01:34:46Z"
+ :samples [
+  {:label "dispatch-c-native" :n 2200 :min-ns 0 :p50-ns 0 :p90-ns 0 :p99-ns 1000 :max-ns 1000 :mean-ns 24}
+  {:label "forward-word" :n 500 :min-ns 0 :p50-ns 0 :p90-ns 0 :p99-ns 1000 :max-ns 1000 :mean-ns 84}
+  {:label "backward-word" :n 500 :min-ns 0 :p50-ns 0 :p90-ns 0 :p99-ns 1000 :max-ns 2000 :mean-ns 68}
+  {:label "beginning-of-buffer" :n 500 :min-ns 0 :p50-ns 0 :p90-ns 0 :p99-ns 1000 :max-ns 1000 :mean-ns 78}
+  {:label "end-of-buffer" :n 500 :min-ns 0 :p50-ns 0 :p90-ns 0 :p99-ns 1000 :max-ns 3000 :mean-ns 74}
+ ]}

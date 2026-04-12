@@ -1,0 +1,18 @@
+# Hammock perf: PTY driver smoke script.
+#
+# Lines starting with '#' are comments. See test/pty_bench.c for the
+# parser. Timing is measured via the 5ms idle-window method: after each
+# `measure` action, the driver writes the keystrokes and reads output
+# until no bytes have arrived for 5ms, then records the wall-clock delta.
+#
+# Measures cursor motion and window ops against the welcome buffer; this
+# avoids the find-file prompt which requires minibuffer interaction.
+wait-for  "Hammock"
+measure   "scroll-down"   send "C-n"   times 50
+measure   "scroll-up"     send "C-p"   times 50
+measure   "forward-char"  send "C-f"   times 100
+measure   "backward-char" send "C-b"   times 100
+measure   "split-below"   send "C-x 2"
+measure   "other-window"  send "C-x o"
+measure   "delete-other"  send "C-x 1"
+send      "C-x C-c"

@@ -7,6 +7,7 @@
 #include "effects.h"
 #include "mode.h"
 #include "util.h"
+#include "perf.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
@@ -77,13 +78,16 @@ void command_dispatch(const char *name, bool clj_available) {
 
     if (entry->dispatch == CMD_C_NATIVE || !clj_available) {
         if (entry->fn) {
+            uint64_t t0 = perf_now_ns();
             entry->fn();
+            perf_record("dispatch-c-native", perf_now_ns() - t0);
             need_redisplay = true;
         } else {
             message("Command '%s' requires Clojure", name);
         }
     } else {
         /* Clojure dispatch via SCI */
+        uint64_t t0 = perf_now_ns();
         state_push_snapshot();
         char dispatch_code[256];
         snprintf(dispatch_code, sizeof(dispatch_code),
@@ -93,6 +97,7 @@ void command_dispatch(const char *name, bool clj_available) {
             effects_execute(effects_edn);
             free(effects_edn);
         }
+        perf_record("dispatch-clojure", perf_now_ns() - t0);
         need_redisplay = true;
     }
 }

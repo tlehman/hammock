@@ -1,0 +1,13 @@
+{:version "0.2.1"
+ :host "bender"
+ :mode :bench
+ :timestamp "2026-04-12T01:34:46Z"
+ :samples [
+  {:label "dispatch-c-native" :n 6600 :min-ns 0 :p50-ns 0 :p90-ns 10000 :p99-ns 25000 :max-ns 32000 :mean-ns 2154}
+  {:label "forward-char" :n 1000 :min-ns 0 :p50-ns 0 :p90-ns 0 :p99-ns 1000 :max-ns 9000 :mean-ns 105}
+  {:label "backward-char" :n 1000 :min-ns 0 :p50-ns 0 :p90-ns 0 :p99-ns 1000 :max-ns 3000 :mean-ns 94}
+  {:label "next-line" :n 1000 :min-ns 0 :p50-ns 14000 :p90-ns 25000 :p99-ns 27000 :max-ns 32000 :mean-ns 14001}
+  {:label "previous-line" :n 1000 :min-ns 0 :p50-ns 0 :p90-ns 0 :p99-ns 1000 :max-ns 10000 :mean-ns 94}
+  {:label "beginning-of-line" :n 1000 :min-ns 0 :p50-ns 0 :p90-ns 0 :p99-ns 1000 :max-ns 1000 :mean-ns 82}
+  {:label "end-of-line" :n 1000 :min-ns 0 :p50-ns 0 :p90-ns 0 :p99-ns 1000 :max-ns 1000 :mean-ns 91}
+ ]}

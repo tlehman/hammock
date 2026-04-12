@@ -62,10 +62,64 @@ $(BUILD_DIR):
 $(LIBSCI):
 	$(MAKE) -C libsci
 
+# ---- Perf harness ----
+
+PERF_DIR      = perf
+PERF_FIXTURES = $(PERF_DIR)/fixtures
+PERF_SCRIPTS  = $(PERF_DIR)/scripts
+PERF_BASELINE_DIR = $(PERF_DIR)/baselines
+HOST_SHORT    = $(shell hostname -s)
+PTY_BENCH_BIN = $(BUILD_DIR)/pty_bench
+PTY_BENCH_SRC = test/pty_bench.c
+
+$(PERF_FIXTURES)/small.txt $(PERF_FIXTURES)/medium.txt $(PERF_FIXTURES)/large.txt &: | $(PERF_FIXTURES)
+	@cat clj/*.clj > $(PERF_FIXTURES)/_base.txt
+	@head -n 100 $(PERF_FIXTURES)/_base.txt > $(PERF_FIXTURES)/small.txt
+	@awk 'BEGIN{for(i=0;i<25;i++)for(j=0;j<400;j++)print "(def perf-line-"j" :padding-"i")"}' > $(PERF_FIXTURES)/medium.txt
+	@awk 'BEGIN{for(i=0;i<250;i++)for(j=0;j<400;j++)print "(def perf-line-"j" :padding-"i")"}' > $(PERF_FIXTURES)/large.txt
+	@rm -f $(PERF_FIXTURES)/_base.txt
+	@wc -l $(PERF_FIXTURES)/small.txt $(PERF_FIXTURES)/medium.txt $(PERF_FIXTURES)/large.txt
+
+$(PERF_FIXTURES):
+	mkdir -p $(PERF_FIXTURES)
+
+perf-fixtures: $(PERF_FIXTURES)/small.txt $(PERF_FIXTURES)/medium.txt $(PERF_FIXTURES)/large.txt
+
+perf-run: $(TARGET) $(PERF_FIXTURES)/medium.txt
+	./$(TARGET) --bench $(PERF_SCRIPTS)/keystroke-latency.edn
+	./$(TARGET) --bench $(PERF_SCRIPTS)/cursor-macro.edn
+	./$(TARGET) --bench $(PERF_SCRIPTS)/dispatch-mix.edn
+
+perf-baseline: $(TARGET) $(PERF_FIXTURES)/medium.txt
+	@mkdir -p $(PERF_BASELINE_DIR)
+	./$(TARGET) --bench $(PERF_SCRIPTS)/keystroke-latency.edn
+	@cp $$(ls -t $(PERF_DIR)/runs/*.edn | head -1) \
+	    $(PERF_BASELINE_DIR)/v$(HAMMOCK_VERSION)-$(HOST_SHORT)-keystroke.edn
+	./$(TARGET) --bench $(PERF_SCRIPTS)/cursor-macro.edn
+	@cp $$(ls -t $(PERF_DIR)/runs/*.edn | head -1) \
+	    $(PERF_BASELINE_DIR)/v$(HAMMOCK_VERSION)-$(HOST_SHORT)-cursor-macro.edn
+	./$(TARGET) --bench $(PERF_SCRIPTS)/dispatch-mix.edn
+	@cp $$(ls -t $(PERF_DIR)/runs/*.edn | head -1) \
+	    $(PERF_BASELINE_DIR)/v$(HAMMOCK_VERSION)-$(HOST_SHORT)-dispatch-mix.edn
+	@echo "perf: baseline written to $(PERF_BASELINE_DIR)/v$(HAMMOCK_VERSION)-$(HOST_SHORT)-*.edn"
+
+perf-diff: $(TARGET) $(PERF_FIXTURES)/medium.txt
+	./$(TARGET) --bench $(PERF_SCRIPTS)/keystroke-latency.edn
+	@LATEST=$$(find $(PERF_DIR)/runs -name '*.edn' -type f -exec stat -f '%m %N' {} \; | sort -rn | head -1 | cut -d' ' -f2-); \
+	./$(TARGET) -e "(hammock.perf/report \"$(PERF_BASELINE_DIR)/v$(HAMMOCK_VERSION)-$(HOST_SHORT)-keystroke.edn\" \"$$LATEST\")"
+
+pty-bench: $(PTY_BENCH_BIN)
+
+$(PTY_BENCH_BIN): $(PTY_BENCH_SRC) | $(BUILD_DIR)
+	$(CC) -Wall -Wextra -std=c11 -g -O2 $(PTY_BENCH_SRC) -o $(PTY_BENCH_BIN)
+
+perf-pty: $(PTY_BENCH_BIN) $(TARGET) $(PERF_FIXTURES)/medium.txt
+	$(PTY_BENCH_BIN) $(PERF_SCRIPTS)/pty-smoke.txt
+
 clean:
 	rm -rf $(BUILD_DIR) $(TARGET) $(NEWS_HEADER) $(LOGO_HEADER)
 
 clean-all: clean
 	$(MAKE) -C libsci clean
 
-.PHONY: clean clean-all check
+.PHONY: clean clean-all check perf-fixtures perf-run perf-baseline perf-diff pty-bench perf-pty

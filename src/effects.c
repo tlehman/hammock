@@ -41,10 +41,18 @@ void edn_free(EdnVal *v) {
 }
 
 static void skip_whitespace(const char *s, size_t len, size_t *pos) {
-    while (*pos < len && (s[*pos] == ' ' || s[*pos] == '\t' ||
-                          s[*pos] == '\n' || s[*pos] == '\r' ||
-                          s[*pos] == ','))
-        (*pos)++;
+    for (;;) {
+        while (*pos < len && (s[*pos] == ' ' || s[*pos] == '\t' ||
+                              s[*pos] == '\n' || s[*pos] == '\r' ||
+                              s[*pos] == ','))
+            (*pos)++;
+        /* EDN line comment: ;; ... \n (a single ; is also a comment). */
+        if (*pos < len && s[*pos] == ';') {
+            while (*pos < len && s[*pos] != '\n') (*pos)++;
+            continue;
+        }
+        break;
+    }
 }
 
 EdnVal *edn_parse(const char *s, size_t len, size_t *consumed) {

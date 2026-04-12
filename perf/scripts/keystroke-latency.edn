@@ -1,0 +1,14 @@
+;; Hammock perf: keystroke latency on the medium fixture.
+;;
+;; Directive vector. Each :case runs `command-dispatch` on a named command
+;; under hammock's bench mode, producing min/p50/p90/p99/max/mean samples.
+;; See src/main.c:run_bench for the runner and src/perf.c for the sampler.
+[[:fixture "perf/fixtures/medium.txt"]
+ [:warmup 100]
+ [:iterations 1000]
+ [:case "forward-char"       "forward-char"]
+ [:case "backward-char"      "backward-char"]
+ [:case "next-line"          "next-line"]
+ [:case "previous-line"      "previous-line"]
+ [:case "beginning-of-line"  "beginning-of-line"]
+ [:case "end-of-line"        "end-of-line"]]
