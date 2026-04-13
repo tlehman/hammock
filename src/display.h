@@ -37,4 +37,9 @@ void display_modeline(Window *win, bool is_current);
 void display_minibuffer(const char *msg);
 void display_clear(void);
 
+/* Paren-flash: reverse-video a single byte for a short duration. */
+void display_flash_set(Buffer *buf, size_t pos, int ms);
+void display_flash_clear(void);
+int  display_flash_active(void);    /* 0/1, auto-expires */
+
 #endif

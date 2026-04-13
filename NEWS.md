@@ -1,5 +1,42 @@
 # Hammock NEWS -- history of user-visible changes.
 
+## v0.2.4
+
+- In Clojure mode, typing `)`, `]`, or `}` briefly highlights the
+  matching opener for one second (string/comment/char-literal aware).
+  When the match is off-screen, its line is echoed in the minibuffer.
+  No flash if no match is found.
+- **`C-j` (`eval-last-sexp`) now persists state changes.** `(def x 42)`
+  and `(ns foo)` typed into `*scratch*` used to vanish on return: the
+  v0.2.3 interruptible eval `fork()`ed a child to run SCI so `C-g`
+  could `SIGKILL` it, but that also meant every side effect lived in
+  the child's copy-on-write isolate and was discarded on `_exit`.
+  `sci_eval_interruptible` in `src/sci.c` now runs the eval on a
+  pthread attached to the main GraalVM isolate via
+  `graal_attach_thread`, so `ns`/`def`/atom swaps survive the call.
+  `C-g` no longer kills the eval (GraalVM native-image doesn't expose a
+  safe thread interrupt, and aborting SCI mid-eval would leave the
+  isolate in an inconsistent state); instead it detaches the UI from
+  the running job and reports `Quit`. A subsequent `C-j` blocks at
+  `isolate_mu` until the abandoned worker finishes, so a runaway user
+  loop still pins the editor — this is the tradeoff for persistent
+  state. Most interactive evals finish in microseconds and this is
+  invisible.
+- **`(ns foo)` inside `sci_eval` now actually registers the namespace.**
+  `hammock -e '(do (prn (count (all-ns))) (ns foobar) (prn (count (all-ns))))'`
+  used to print the same count twice: SCI only processes `ns` as a
+  namespace-registering form when it's at the top level, but
+  `SciLib.sciEvalString` was wrapping every eval in
+  `(binding [*out* ... *err* ...] (do <code>))` to give `prn`/`println`
+  a bound writer, demoting every user form out of top-level position.
+  The wrapper is gone; instead, `sciInit` installs the capture writer
+  as the root value of `clojure.core/*out*`/`*err*` once, by calling
+  `sci.core/alter-var-root` from the host side (which sets
+  `sci.impl.unrestrict/*unrestricted* true` and bypasses the built-in
+  read-only guard). User code is now passed verbatim to `eval-string*`,
+  so `ns`, `:require`, `:refer`, and other top-level-only side effects
+  work regardless of nesting.
+
 ## Version 0.2.3 (2026-04-12)
 
 ### Input

@@ -13,6 +13,7 @@
 #include "effects.h"
 #include "util.h"
 #include "perf.h"
+#include "paren.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,7 +37,10 @@ static void self_insert(int ch) {
         return;
     }
     char c = (char)ch;
+    size_t closer_pos = current_buffer->point;
     buffer_insert_char(current_buffer, c);
+    if (c == ')' || c == ']' || c == '}')
+        paren_flash_check(current_buffer, closer_pos);
     current_window->target_col = -1;
     yank_state_invalidate();
     need_redisplay = true;
@@ -744,6 +748,11 @@ int main(int argc, char *argv[]) {
 
         /* Handle timeout (no input) */
         if (ev.key == ERR || (ev.key == 0 && ev.modifiers == 0)) {
+            static int flash_was_active = 0;
+            int flash_now = display_flash_active();
+            if (flash_was_active && !flash_now)
+                need_redisplay = true;
+            flash_was_active = flash_now;
             continue;
         }
 

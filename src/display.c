@@ -5,6 +5,42 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
+
+static Buffer *flash_buf = NULL;
+static size_t  flash_pos = 0;
+static struct timespec flash_deadline;
+
+static long ts_to_ms(struct timespec t) {
+    return t.tv_sec * 1000L + t.tv_nsec / 1000000L;
+}
+
+void display_flash_set(Buffer *buf, size_t pos, int ms) {
+    flash_buf = buf;
+    flash_pos = pos;
+    clock_gettime(CLOCK_MONOTONIC, &flash_deadline);
+    flash_deadline.tv_sec  += ms / 1000;
+    flash_deadline.tv_nsec += (ms % 1000) * 1000000L;
+    if (flash_deadline.tv_nsec >= 1000000000L) {
+        flash_deadline.tv_sec++;
+        flash_deadline.tv_nsec -= 1000000000L;
+    }
+}
+
+void display_flash_clear(void) {
+    flash_buf = NULL;
+}
+
+int display_flash_active(void) {
+    if (!flash_buf) return 0;
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    if (ts_to_ms(now) >= ts_to_ms(flash_deadline)) {
+        flash_buf = NULL;
+        return 0;
+    }
+    return 1;
+}
 
 void display_init(void) {
     initscr();
@@ -358,6 +394,9 @@ void display_refresh_window(Window *win, bool is_current) {
                 continue;
             }
 
+            /* Paren-flash: check once per byte, shared by UTF-8 and single-byte paths. */
+            int is_flash = (display_flash_active() && flash_buf == buf && pos == flash_pos);
+
             /* UTF-8 multi-byte: emit the whole sequence in one write so
              * the terminal sees valid UTF-8 instead of byte fragments
              * split by cursor-move escapes. */
@@ -375,7 +414,11 @@ void display_refresh_window(Window *win, bool is_current) {
                     utf8[i] = buffer_char_at(buf, pos + i);
                 }
 
-                if (has_region && pos >= region_start && pos < region_end) {
+                if (is_flash) {
+                    attron(A_REVERSE);
+                    mvaddstr(win->y + row, win->x + col, utf8);
+                    attroff(A_REVERSE);
+                } else if (has_region && pos >= region_start && pos < region_end) {
                     attron(COLOR_PAIR(COLOR_REGION));
                     mvaddstr(win->y + row, win->x + col, utf8);
                     attroff(COLOR_PAIR(COLOR_REGION));
@@ -393,7 +436,11 @@ void display_refresh_window(Window *win, bool is_current) {
             }
 
             /* Apply region highlight (overrides syntax) or syntax color */
-            if (has_region && pos >= region_start && pos < region_end) {
+            if (is_flash) {
+                attron(A_REVERSE);
+                mvaddch(win->y + row, win->x + col, ch);
+                attroff(A_REVERSE);
+            } else if (has_region && pos >= region_start && pos < region_end) {
                 attron(COLOR_PAIR(COLOR_REGION));
                 mvaddch(win->y + row, win->x + col, ch);
                 attroff(COLOR_PAIR(COLOR_REGION));

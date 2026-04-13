@@ -32,6 +32,8 @@ public class SciLib {
     // Resolve SCI functions at build time (class init runs during native-image build)
     private static final IFn SCI_INIT;
     private static final IFn SCI_EVAL_STRING;
+    private static final IFn SCI_ALTER_VAR_ROOT;
+    private static final IFn CONSTANTLY;
     private static final IFn PR_STR;
 
     static {
@@ -40,6 +42,8 @@ public class SciLib {
             RT.var("clojure.core", "require").invoke(Symbol.intern("sci.core"));
             SCI_INIT = RT.var("sci.core", "init");
             SCI_EVAL_STRING = RT.var("sci.core", "eval-string*");
+            SCI_ALTER_VAR_ROOT = RT.var("sci.core", "alter-var-root");
+            CONSTANTLY = RT.var("clojure.core", "constantly");
             PR_STR = RT.var("clojure.core", "pr-str");
         } catch (Exception e) {
             throw new RuntimeException("Failed to initialize SCI at build time", e);
@@ -110,12 +114,9 @@ public class SciLib {
             Object shellNs = RT.map(
                 Symbol.intern("exec"), SHELL_EXEC
             );
-            // Expose the capture writer as a bound var so Clojure code
-            // can rebind *out* to it via alter-var-root below.
             Object hammockIoNs = RT.map(
                 Symbol.intern("capture-out"), captureOut
             );
-
             sciCtx = SCI_INIT.invoke(
                 RT.map(
                     Keyword.intern("namespaces"),
@@ -125,6 +126,27 @@ public class SciLib {
                     )
                 )
             );
+
+            // Install the capture writer as the root value of
+            // clojure.core/*out* and *err*. Once this runs, user code
+            // can call prn/println without needing a wrapping
+            // (binding ...) form. The wrapper would demote every user
+            // form out of top-level position, breaking `ns` and any
+            // other form whose side effects only fire when analysed at
+            // the top level by SCI.
+            //
+            // The built-in vars are read-only from user code, but
+            // sci.core/alter-var-root (called from the host) binds
+            // sci.impl.unrestrict/*unrestricted* true and bypasses the
+            // guard. We resolve the sci Var objects via eval, then
+            // invoke sci.core/alter-var-root on them directly.
+            Object outVar = SCI_EVAL_STRING.invoke(sciCtx,
+                "#'clojure.core/*out*");
+            Object errVar = SCI_EVAL_STRING.invoke(sciCtx,
+                "#'clojure.core/*err*");
+            Object constOut = CONSTANTLY.invoke(captureOut);
+            SCI_ALTER_VAR_ROOT.invoke(outVar, constOut);
+            SCI_ALTER_VAR_ROOT.invoke(errVar, constOut);
             return 0;
         } catch (Exception e) {
             System.err.println("sci_init failed: " + e.getMessage());
@@ -144,36 +166,11 @@ public class SciLib {
                 captureBuffer.getBuffer().setLength(0);
             }
 
-            // Wrap user code in a binding form that rebinds *out* / *err*
-            // to our capture writer. SCI's built-in *out* is read-only at
-            // the root, but dynamic binding via (binding ...) is allowed
-            // and gives println/print a valid Writer to cast to.
-            //
-            // Skip wrapping for file loads: those contain top-level (ns ...)
-            // forms whose alias/require side-effects only fire when ns is
-            // evaluated at top level, not nested inside (do ...). We detect
-            // them by the leading `(ns` token.
-            String trimmed = codeStr;
-            int start = 0;
-            while (start < trimmed.length() &&
-                   Character.isWhitespace(trimmed.charAt(start))) {
-                start++;
-            }
-            boolean isFileLoad =
-                trimmed.regionMatches(start, "(ns ", 0, 4) ||
-                trimmed.regionMatches(start, "(ns\n", 0, 4) ||
-                trimmed.regionMatches(start, "(ns\t", 0, 4);
-
-            String toEval;
-            if (isFileLoad) {
-                toEval = codeStr;
-            } else {
-                toEval = "(binding [*out* hammock.io/capture-out " +
-                         "          *err* hammock.io/capture-out] " +
-                         "  (do " + codeStr + "))";
-            }
-
-            Object result = SCI_EVAL_STRING.invoke(sciCtx, toEval);
+            // User code is evaluated verbatim. *out*/*err* are bound at
+            // the root in sciInit, so no wrapping is needed — and wrapping
+            // would demote forms like (ns ...) out of top-level position,
+            // breaking namespace registration and :require/:refer.
+            Object result = SCI_EVAL_STRING.invoke(sciCtx, codeStr);
 
             // Collect whatever the eval printed via (println ...) etc.
             String printed = "";

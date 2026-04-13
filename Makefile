@@ -122,4 +122,12 @@ clean:
 clean-all: clean
 	$(MAKE) -C libsci clean
 
-.PHONY: clean clean-all check perf-fixtures perf-run perf-baseline perf-diff pty-bench perf-pty
+# Pure C unit test for paren scanner (no ncurses/sci linkage).
+PAREN_TEST_BIN = $(BUILD_DIR)/paren_test
+$(PAREN_TEST_BIN): test/paren_test.c src/paren.c src/paren.h | $(BUILD_DIR)
+	$(CC) -Wall -Wextra -std=c11 -g -O0 -DPAREN_SCANNER_ONLY test/paren_test.c src/paren.c -o $@
+
+paren-test: $(PAREN_TEST_BIN)
+	./$(PAREN_TEST_BIN)
+
+.PHONY: clean clean-all check perf-fixtures perf-run perf-baseline perf-diff pty-bench perf-pty paren-test
