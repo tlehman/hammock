@@ -35,6 +35,20 @@ $(TARGET): $(UBER_JAR)
 		--initialize-at-build-time \
 		-H:+ReportExceptionStackTraces \
 		-o libsci
+ifeq ($(UNAME_S),Darwin)
+	@# Make the dylib relocatable and point libz at the macOS system copy
+	@# so the shipped artifact has no /nix/store paths.
+	install_name_tool -id @rpath/libsci.dylib $(TARGET)
+	@NIX_LIBZ=$$(otool -L $(TARGET) | awk '/\/nix\/store\/.*libz/ {print $$1; exit}'); \
+	if [ -n "$$NIX_LIBZ" ]; then \
+		echo "install_name_tool -change $$NIX_LIBZ /usr/lib/libz.1.dylib $(TARGET)"; \
+		install_name_tool -change "$$NIX_LIBZ" /usr/lib/libz.1.dylib $(TARGET); \
+	fi
+	@echo "--- otool -L $(TARGET) ---"; otool -L $(TARGET)
+	@if otool -L $(TARGET) | grep -q /nix/store; then \
+		echo "ERROR: /nix/store path leaked into $(TARGET)"; exit 1; \
+	fi
+endif
 
 clean:
 	rm -rf target libsci.$(LIB_EXT) libsci.h graal_isolate.h graal_isolate_dynamic.h libsci_dynamic.h

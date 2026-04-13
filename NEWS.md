@@ -1,5 +1,32 @@
 # Hammock NEWS -- history of user-visible changes.
 
+## v0.2.5
+
+- **Shipped `hammock` binary no longer needs `nix` at runtime** (macOS).
+  The build now links against the Xcode SDK's ncurses stub
+  (`xcrun --show-sdk-path`/usr/lib) instead of the nix-store copy, so
+  `otool -L ./hammock` records `/usr/lib/libncurses*.dylib` (resolved
+  from the dyld shared cache) on any macOS with Command Line Tools.
+  `libsci/Makefile` post-processes `libsci.dylib` with
+  `install_name_tool`: the install name becomes `@rpath/libsci.dylib`
+  and the libz dependency is rewritten from the nix-store path to
+  `/usr/lib/libz.1.dylib`. Both Makefiles fail the build if any
+  `/nix/store` path leaks into the final artifacts.
+- **`hammock` runs from anywhere, not just the source tree.** `main.c`
+  now locates `clj/loadup.clj` via (1) `$HAMMOCK_SOURCE`, (2) the
+  directory of the executable (`_NSGetExecutablePath` on macOS,
+  `/proc/self/exe` on Linux), (3) `<exe_dir>/../share/hammock` for the
+  installed layout, or (4) the current working directory. The file
+  argument is resolved to an absolute path *before* `chdir` into the
+  source root, so `hammock ./foo.md` opens the right file.
+- **`make install`** installs `hammock` to `$(PREFIX)/bin`, Clojure
+  sources to `$(PREFIX)/share/hammock/clj`, and `libsci.dylib` to
+  `$(PREFIX)/share/hammock/libsci`. The binary's rpath includes
+  `@executable_path/../share/hammock/libsci` (and the `$ORIGIN`
+  equivalent on Linux), so the installed layout resolves libsci
+  without `DYLD_LIBRARY_PATH`. `PREFIX` defaults to `/usr/local`;
+  `DESTDIR` is honored for staged installs.
+
 ## v0.2.4
 
 - In Clojure mode, typing `)`, `]`, or `}` briefly highlights the

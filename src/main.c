@@ -23,8 +23,72 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <ncurses.h>
+#include <libgen.h>
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
 
 static volatile sig_atomic_t got_sigwinch = 0;
+
+/* Fill `out` with the directory containing the running executable.
+ * Returns 0 on success, -1 on failure. */
+static int exe_dir(char *out, size_t n) {
+    char buf[4096];
+#ifdef __APPLE__
+    uint32_t size = sizeof(buf);
+    if (_NSGetExecutablePath(buf, &size) != 0) return -1;
+#else
+    ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (len <= 0) return -1;
+    buf[len] = '\0';
+#endif
+    char real[4096];
+    if (!realpath(buf, real)) {
+        if (strlen(buf) >= sizeof(real)) return -1;
+        strcpy(real, buf);
+    }
+    char *d = dirname(real);
+    if (!d || strlen(d) >= n) return -1;
+    strcpy(out, d);
+    return 0;
+}
+
+/* Check whether `dir` contains clj/loadup.clj. */
+static int has_loadup(const char *dir) {
+    char path[4096];
+    if (snprintf(path, sizeof(path), "%s/clj/loadup.clj", dir) >= (int)sizeof(path))
+        return 0;
+    struct stat st;
+    return stat(path, &st) == 0 && S_ISREG(st.st_mode);
+}
+
+/* Locate the directory containing clj/loadup.clj. Search order:
+ *   1. $HAMMOCK_SOURCE
+ *   2. directory of the executable
+ *   3. <exe_dir>/../share/hammock  (installed layout)
+ *   4. current working directory
+ * Returns malloc'd absolute path on success, NULL on failure. */
+static char *resolve_source_root(void) {
+    const char *env = getenv("HAMMOCK_SOURCE");
+    if (env && env[0] && has_loadup(env)) return hstrdup(env);
+
+    char ed[4096];
+    if (exe_dir(ed, sizeof(ed)) == 0) {
+        if (has_loadup(ed)) return hstrdup(ed);
+        char share[4096];
+        if (snprintf(share, sizeof(share), "%s/../share/hammock", ed) < (int)sizeof(share)) {
+            char real[4096];
+            if (realpath(share, real) && has_loadup(real)) return hstrdup(real);
+        }
+    }
+
+    if (has_loadup(".")) {
+        char cwd[4096];
+        if (getcwd(cwd, sizeof(cwd))) return hstrdup(cwd);
+        return hstrdup(".");
+    }
+    return NULL;
+}
 
 static void handle_sigwinch(int sig) {
     (void)sig;
@@ -522,6 +586,42 @@ int main(int argc, char *argv[]) {
             file_arg_idx = i;
         }
     }
+    /* Resolve the file argument to an absolute path before we chdir
+     * into the source root. */
+    char *file_arg_abs = NULL;
+    if (file_arg_idx) {
+        char resolved[4096];
+        if (realpath(argv[file_arg_idx], resolved)) {
+            file_arg_abs = hstrdup(resolved);
+        } else if (argv[file_arg_idx][0] == '/') {
+            file_arg_abs = hstrdup(argv[file_arg_idx]);
+        } else {
+            char cwd[4096];
+            if (getcwd(cwd, sizeof(cwd))) {
+                char joined[8192];
+                snprintf(joined, sizeof(joined), "%s/%s", cwd, argv[file_arg_idx]);
+                file_arg_abs = hstrdup(joined);
+            } else {
+                file_arg_abs = hstrdup(argv[file_arg_idx]);
+            }
+        }
+    }
+
+    /* Locate the Clojure source root and chdir into it so bootstrap
+     * loads (clj/loadup.clj and friends) resolve regardless of cwd. */
+    char *source_root = resolve_source_root();
+    if (!source_root) {
+        fprintf(stderr,
+                "hammock: cannot locate clj/loadup.clj; "
+                "set HAMMOCK_SOURCE or run from the source tree\n");
+        return 1;
+    }
+    setenv("HAMMOCK_SOURCE", source_root, 0);
+    if (chdir(source_root) != 0) {
+        fprintf(stderr, "hammock: chdir(%s) failed\n", source_root);
+        return 1;
+    }
+
     if (eval_expr)    return run_headless_eval(eval_expr);
     if (bench_script) return run_bench(bench_script);
 
@@ -640,7 +740,7 @@ int main(int argc, char *argv[]) {
     /* Open file if given, otherwise start in *Hammock* welcome buffer */
     Buffer *buf;
     if (file_arg_idx) {
-        const char *path = argv[file_arg_idx];
+        const char *path = file_arg_abs ? file_arg_abs : argv[file_arg_idx];
         const char *name = strrchr(path, '/');
         name = name ? name + 1 : path;
         buf = buffer_create(name);

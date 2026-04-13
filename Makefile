@@ -1,4 +1,6 @@
 CC = cc
+PREFIX ?= /usr/local
+DESTDIR ?=
 # Single source of truth for the version lives in clj/core.clj.
 # Extract the literal from (defn hammock-version [] "X.Y.Z") and inject it
 # into every C compilation unit as HAMMOCK_VERSION.
@@ -8,13 +10,20 @@ CFLAGS = -Wall -Wextra -std=c11 -g -O2 -Ilibsci -DHAMMOCK_VERSION='"$(HAMMOCK_VE
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
   LIB_EXT = dylib
-  RPATH   = -Wl,-rpath,@executable_path/libsci
+  RPATH   = -Wl,-rpath,@executable_path/libsci -Wl,-rpath,@executable_path/../share/hammock/libsci
+  # Link against the macOS SDK's ncurses stub so the binary records
+  # /usr/lib/libncurses*.dylib (resolved from the dyld shared cache)
+  # instead of a /nix/store path. This keeps the shipped binary runnable
+  # on any macOS with Xcode Command Line Tools, without the nix store.
+  SDK_LIBDIR := $(shell xcrun --show-sdk-path 2>/dev/null)/usr/lib
+  NCURSES_LDFLAGS = -L$(SDK_LIBDIR) -lncurses
 else
   LIB_EXT = so
-  RPATH   = -Wl,-rpath,$$ORIGIN/libsci
+  RPATH   = -Wl,-rpath,$$ORIGIN/libsci -Wl,-rpath,$$ORIGIN/../share/hammock/libsci
+  NCURSES_LDFLAGS = -lncurses
 endif
 
-LDFLAGS = -lncurses -Llibsci -lsci $(RPATH)
+LDFLAGS = $(NCURSES_LDFLAGS) -Llibsci -lsci $(RPATH)
 
 SRC_DIR = src
 BUILD_DIR = build
@@ -28,6 +37,12 @@ LIBSCI = libsci/libsci.$(LIB_EXT)
 
 $(TARGET): $(LIBSCI) $(NEWS_HEADER) $(LOGO_HEADER) $(OBJS)
 	$(CC) $(OBJS) -o $@ $(LDFLAGS)
+ifeq ($(UNAME_S),Darwin)
+	@if otool -L $@ | grep -q /nix/store; then \
+		echo "ERROR: /nix/store path leaked into $@:"; \
+		otool -L $@ | grep /nix/store; exit 1; \
+	fi
+endif
 
 # Non-interactive smoke test: links against libsci and runs the Clojure
 # load sequence plus a handful of probes. Run via `make check`.
@@ -35,7 +50,7 @@ SMOKE_SRC = test/smoke.c
 SMOKE_BIN = $(BUILD_DIR)/smoke
 
 $(SMOKE_BIN): $(SMOKE_SRC) $(LIBSCI) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) $(SMOKE_SRC) -o $(SMOKE_BIN) $(LDFLAGS)
+	$(CC) $(CFLAGS) $(SMOKE_SRC) -o $(SMOKE_BIN) $(LDFLAGS) -Wl,-rpath,@executable_path/../libsci
 
 check: $(SMOKE_BIN)
 	./$(SMOKE_BIN)
@@ -116,6 +131,14 @@ $(PTY_BENCH_BIN): $(PTY_BENCH_SRC) | $(BUILD_DIR)
 perf-pty: $(PTY_BENCH_BIN) $(TARGET) $(PERF_FIXTURES)/medium.txt
 	$(PTY_BENCH_BIN) $(PERF_SCRIPTS)/pty-smoke.txt
 
+install: $(TARGET)
+	install -d $(DESTDIR)$(PREFIX)/bin
+	install -d $(DESTDIR)$(PREFIX)/share/hammock/clj
+	install -d $(DESTDIR)$(PREFIX)/share/hammock/libsci
+	install -m755 $(TARGET) $(DESTDIR)$(PREFIX)/bin/
+	install -m644 clj/*.clj $(DESTDIR)$(PREFIX)/share/hammock/clj/
+	install -m755 $(LIBSCI) $(DESTDIR)$(PREFIX)/share/hammock/libsci/
+
 clean:
 	rm -rf $(BUILD_DIR) $(TARGET) $(NEWS_HEADER) $(LOGO_HEADER)
 
@@ -130,4 +153,4 @@ $(PAREN_TEST_BIN): test/paren_test.c src/paren.c src/paren.h | $(BUILD_DIR)
 paren-test: $(PAREN_TEST_BIN)
 	./$(PAREN_TEST_BIN)
 
-.PHONY: clean clean-all check perf-fixtures perf-run perf-baseline perf-diff pty-bench perf-pty paren-test
+.PHONY: clean clean-all check install perf-fixtures perf-run perf-baseline perf-diff pty-bench perf-pty paren-test

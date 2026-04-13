@@ -27,7 +27,7 @@ make               # builds ./hammock binary
 make clean         # removes build/ dir and binary
 ```
 
-Requires: C11 compiler, ncurses, GraalVM CE with native-image (provided by `nix develop`).
+Build-time requirements (from `nix develop`): C11 compiler, GraalVM CE with native-image, Clojure. On macOS the build links `hammock` against the Xcode SDK's ncurses and rewrites `libsci.dylib`'s libz dependency to the system copy, so the shipped pair (`./hammock` + `./libsci/libsci.dylib`) runs on any macOS with Xcode Command Line Tools. No `nix` needed at runtime.
 
 ## Perf testing
 
@@ -59,7 +59,6 @@ Each keystroke is dispatched through the keymap. Hot-path commands (cursor movem
 Users can modify editor behavior live via `C-j` in the scratch buffer.
 
 ## TODO 
-- [ ] feature: static linking of libsci so it doesn't need `nix` at runtime
 - [ ] feature: rattles spinner for long-running external process: [rattles](https://github.com/vyfor/rattles)
 - [ ] feature: in markdown mode, tables are displayed with padding and look rectangular (like org-mode)
 - [ ] feature: render LaTeX expressions between dollar signs using [LaTeX-2-Unicode](https ://github.com/tlehman/latex2unicode) library
