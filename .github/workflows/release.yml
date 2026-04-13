@@ -42,9 +42,10 @@ jobs:
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
           DIST="hammock-${VERSION}-${{ matrix.platform }}-${{ matrix.arch }}"
-          mkdir -p "$DIST/libsci"
+          mkdir -p "$DIST/libsci" "$DIST/clj"
           cp hammock "$DIST/"
           cp "libsci/libsci.${{ matrix.lib_ext }}" "$DIST/libsci/"
+          cp clj/*.clj "$DIST/clj/"
           tar czf "${DIST}.tar.gz" "$DIST"
 
       - name: Upload artifact
@@ -94,3 +95,70 @@ jobs:
           gh release create "v${VERSION}" dist/*.tar.gz \
             --title "Hammock ${VERSION}" \
             --notes-file RELEASE_NOTES.md
+
+  update-tap:
+    name: Update Homebrew tap
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate and push formula
+        env:
+          GH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          mkdir assets
+          gh release download "v${VERSION}" \
+            --repo tlehman/hammock \
+            --pattern '*.tar.gz' \
+            --dir assets
+
+          sha() { shasum -a 256 "$1" | awk '{print $1}'; }
+          SHA_MAC_ARM=$(sha "assets/hammock-${VERSION}-macos-arm64.tar.gz")
+          SHA_MAC_X86=$(sha "assets/hammock-${VERSION}-macos-x86_64.tar.gz")
+          SHA_LINUX=$(sha "assets/hammock-${VERSION}-linux-x86_64.tar.gz")
+
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/tlehman/homebrew-hammock.git" tap
+          mkdir -p tap/Formula
+          cat > tap/Formula/hammock.rb <<EOF
+          class Hammock < Formula
+            desc "Terminal text editor with a C kernel and Clojure (SCI) scripting layer"
+            homepage "https://github.com/tlehman/hammock"
+            version "${VERSION}"
+            license "MIT"
+
+            on_macos do
+              on_arm do
+                url "https://github.com/tlehman/hammock/releases/download/v${VERSION}/hammock-${VERSION}-macos-arm64.tar.gz"
+                sha256 "${SHA_MAC_ARM}"
+              end
+              on_intel do
+                url "https://github.com/tlehman/hammock/releases/download/v${VERSION}/hammock-${VERSION}-macos-x86_64.tar.gz"
+                sha256 "${SHA_MAC_X86}"
+              end
+            end
+
+            on_linux do
+              url "https://github.com/tlehman/hammock/releases/download/v${VERSION}/hammock-${VERSION}-linux-x86_64.tar.gz"
+              sha256 "${SHA_LINUX}"
+            end
+
+            def install
+              bin.install "hammock"
+              (share/"hammock/libsci").install Dir["libsci/*"]
+              (share/"hammock/clj").install Dir["clj/*"]
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/hammock --version")
+            end
+          end
+          EOF
+
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/hammock.rb
+          git commit -m "hammock ${VERSION}"
+          git push
