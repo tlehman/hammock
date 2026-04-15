@@ -6,6 +6,7 @@
 #include "command.h"
 #include "sci.h"
 #include "mode.h"
+#include "font_lock.h"
 #include "shell.h"
 #include "git.h"
 #include "news.h"
@@ -687,6 +688,8 @@ int main(int argc, char *argv[]) {
             free(modes_edn);
         }
 
+        font_lock_reload();
+
         /* Register Clojure commands in the unified command table */
         char *cmds_edn = sci_eval("(hammock.commands/export-command-metadata)");
         if (cmds_edn) {
@@ -837,6 +840,7 @@ int main(int argc, char *argv[]) {
                     last_modes = dom_md;
                     char *md = sci_eval("(hammock.modes/export)");
                     if (md) { modes_load_edn(md); free(md); }
+                    font_lock_reload();
                     perf_record("snapshot-rebuild:modes", perf_now_ns() - t0);
                 }
                 need_redisplay = true;

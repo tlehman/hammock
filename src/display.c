@@ -2,6 +2,7 @@
 #include "buffer.h"
 #include "mode.h"
 #include "syntax.h"
+#include "perf.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -264,7 +265,9 @@ void display_refresh_window(Window *win, bool is_current) {
             size_t lend = buffer_line_end(buf, p);
             int llen = (int)(lend - lstart);
             char *ltext = buffer_region(buf, lstart, lend);
+            uint64_t t0 = perf_now_ns();
             LineHighlight lh = syntax_highlight_line(lang, ltext, llen, syntax_state);
+            perf_record("highlight-line", perf_now_ns() - t0);
             syntax_state = lh.state;
             free(ltext);
             p = buffer_next_line_start(buf, p);
@@ -304,11 +307,15 @@ void display_refresh_window(Window *win, bool is_current) {
 
         if (lang != LANG_NONE && line_len > 0) {
             line_text = buffer_region(buf, line_start_pos, line_end_pos);
+            uint64_t t0 = perf_now_ns();
             hl = syntax_highlight_line(lang, line_text, line_len, syntax_state);
+            perf_record("highlight-line", perf_now_ns() - t0);
             syntax_state = hl.state;
         } else if (lang != LANG_NONE) {
             /* Empty line, still update state */
+            uint64_t t0 = perf_now_ns();
             hl = syntax_highlight_line(lang, "", 0, syntax_state);
+            perf_record("highlight-line", perf_now_ns() - t0);
             syntax_state = hl.state;
         }
 

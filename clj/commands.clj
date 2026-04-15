@@ -138,6 +138,12 @@
           [:point-backward-word]
           [:kill-region]]))
 
+(defcommand "delete-paragraph"
+  "Kill from point to the end of the current paragraph."
+  (fn [] [[:set-mark]
+          [:point-forward-paragraph]
+          [:kill-region]]))
+
 ;; ---- Undo ----
 
 (defcommand "undo" "Undo the last change."
@@ -397,14 +403,15 @@
 (defcommand "git-quit" "Quit git mode: close git buffers and return to previous buffer."
   (fn []
     (let [bufs (fx/buffers)
-          git-names #{"*git-status*" "*git-diff*" "*git-log*"}
+          git-names #{"*git-status*" "*git-diff*" "*git-log*" "*git-show*"}
           target (or (first (keep #(when-not (git-names (:name %)) (:name %)) bufs))
                      "*scratch*")]
       [[:buffer-switch target]
        [:window-delete-others]
        [:buffer-destroy "*git-status*"]
        [:buffer-destroy "*git-diff*"]
-       [:buffer-destroy "*git-log*"]])))
+       [:buffer-destroy "*git-log*"]
+       [:buffer-destroy "*git-show*"]])))
 
 (defn- git-log-effects
   "Return effects to populate the *git-log* buffer with recent commits."
@@ -435,6 +442,26 @@
       [[:buffer-switch target]
        [:buffer-destroy "*git-log*"]])))
 
+(defcommand "git-log-show"
+  "Show the commit at point (git show <sha>) in a split-below pop-up."
+  (fn []
+    (let [line (fx/current-line)
+          sha  (when line (first (str/split (str/trim line) #"\s+")))]
+      (if (seq sha)
+        (let [content (or (not-empty (git/git-show sha))
+                          (str "No output for " sha))]
+          [[:buffer-create "*git-show*"]
+           [:window-split-below]
+           [:window-other]
+           [:buffer-switch "*git-show*"]
+           [:buffer-set-read-only false]
+           [:buffer-set-contents content]
+           [:point-to-buffer-start]
+           [:buffer-set-modified false]
+           [:buffer-set-read-only true]
+           [:buffer-set-mode "Diff"]])
+        [[:message "No commit at point"]]))))
+
 (defcommand "git-fetch" "Fetch from remote and refresh status."
   (fn []
     (let [result (git/git-fetch)
@@ -461,10 +488,13 @@
   (let [result (git/git-commit-with-msg msg)]
     (into [[:message result]] (git-status-effects))))
 
-(defcommand "diff-quit" "Close the diff window and return to git status."
+(defcommand "diff-quit" "Close the diff window and return to git status or git log."
   (fn []
-    [[:window-delete]
-     [:buffer-switch "*git-status*"]]))
+    (let [bufs (fx/buffers)
+          target (or (some #(when (= (:name %) "*git-log*") (:name %)) bufs)
+                     "*git-status*")]
+      [[:window-delete]
+       [:buffer-switch target]])))
 
 ;; ---- Markdown mode ----
 

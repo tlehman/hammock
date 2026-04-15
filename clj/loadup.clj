@@ -16,5 +16,6 @@
    "clj/symbols.clj"
    "clj/commands.clj"
    "clj/keybindings.clj"
+   "clj/syntax-modes.clj"
    "clj/modes.clj"
    "clj/perf.clj"])

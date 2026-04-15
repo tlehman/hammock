@@ -1,5 +1,44 @@
 # Hammock NEWS -- history of user-visible changes.
 
+## v0.2.6
+
+- **Syntax highlighting moved to Clojure (Emacs-style font-lock).** Mode
+  definitions now live in `clj/syntax-modes.clj` as declarative data:
+  a `:syntax-table` (comment/string delimiters, escape char) plus a
+  `:font-lock-keywords` list of rule forms (`{:words [...] :face :f}`,
+  `[pattern :face]`, or `[pattern [:f1 :f2 nil]]` for per-subgroup
+  faces). The C engine in `src/font_lock.c` reads that data once at
+  startup (and on live reload when `*modes*` bumps), compiles the
+  patterns with POSIX ERE via libc `regex.h`, and runs a two-pass
+  highlight per line: syntactic pass (strings / comments / char
+  literals with multi-line state) followed by a keyword pass. Markdown
+  code fences dispatch to the inner language using the same engine.
+  The hand-rolled `highlight_help` stays in C as a special-case
+  fallback (triggered by `:engine :builtin-help` on the Help mode) —
+  it's layout-aware semantic formatting, not a language. Adding a new
+  language is mostly a Clojure edit; the only C touchpoint is a
+  one-line enum bump in `src/syntax.h` and its two string-table
+  entries in `src/mode.c` and `src/font_lock.c`.
+- **Makefile syntax support.** `Makefile`, `makefile`, `GNUmakefile`,
+  and `.mk` / `.mak` files now highlight: comments, directive
+  keywords (`ifeq`, `include`, `export`, …), automatic variables
+  (`$@`, `$<`, `$^`, …), variable references (`$(VAR)` / `${VAR}`),
+  built-in function calls (`$(shell …)`, `$(wildcard …)`, etc.;
+  function name gets the function face), and targets at line start.
+  Lives in `clj/syntax-modes.clj` alongside the other six modes.
+- **New pure-C test harness.** `make font-lock-test` builds and runs
+  `test/font_lock_test.c`, exercising the engine without SCI or
+  ncurses. `make check` now runs both the smoke test and the
+  font-lock tests.
+- **By the numbers.** The six hand-written per-language tokenizers in
+  the old `syntax.c` were ~840 lines of C. Their replacement is 142
+  lines of Clojure data + the bits of `font_lock.c` that aren't
+  test-harness or `highlight_help` (engine proper is ~560 lines). So
+  adding a 7th language (Makefile, see above) went from "write
+  ~100–200 lines of C" to "add ~20 lines of Clojure plus a one-line
+  enum bump in three C files." Most of the +430 C net is one-time
+  engine cost that amortizes over every future language.
+
 ## v0.2.5
 
 - **Shipped `hammock` binary no longer needs `nix` at runtime** (macOS).

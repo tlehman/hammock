@@ -839,17 +839,28 @@ static void cmd_eval_last_sexp(void) {
         return;
     }
 
-    /* Insert result into *scratch* buffer */
+    /* Insert result into *scratch* buffer.
+     * Multi-line results (e.g. from `(doc foo)`, which prints through *out*)
+     * get `; ` prefixed on every line so the whole insertion reads as
+     * comments. The first line keeps the `; => ` marker. */
     Buffer *scratch = buffer_find("*scratch*");
     if (!scratch) {
         scratch = buffer_create("*scratch*");
         buffer_set_mode(scratch, "Clojure");
     }
-    //TODO try inserting at point (leave commented)
-    //scratch->point = buffer_length(scratch);
-    char *insertion = hmalloc(strlen(result) + 8);
-    sprintf(insertion, "\n; => %s", result);
-    buffer_insert_string(scratch, insertion, strlen(insertion));
+    size_t result_len = strlen(result);
+    size_t nl_count = 0;
+    for (size_t i = 0; i < result_len; i++) if (result[i] == '\n') nl_count++;
+    /* "\n; => " (6) + body + 2 extra chars per internal newline + NUL. */
+    char *insertion = hmalloc(result_len + 6 + nl_count * 2 + 1);
+    char *dst = insertion;
+    memcpy(dst, "\n; => ", 6); dst += 6;
+    for (size_t i = 0; i < result_len; i++) {
+        *dst++ = result[i];
+        if (result[i] == '\n') { *dst++ = ';'; *dst++ = ' '; }
+    }
+    *dst = '\0';
+    buffer_insert_string(scratch, insertion, (size_t)(dst - insertion));
     free(insertion);
     message("=> %s", result);
     free(result);

@@ -51,6 +51,7 @@ typedef enum {
     LANG_MARKDOWN,
     LANG_DIFF,
     LANG_HELP,
+    LANG_MAKEFILE,
 } SyntaxLang;
 
 /* Highlight a single line. state_in carries multiline state from previous line.

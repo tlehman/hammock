@@ -124,6 +124,7 @@
    ["C-y" "yank"]
    ["M-y" "yank-pop"]
    ["M-Backspace" "backward-kill-word"]
+   ["M-k" "delete-paragraph"]
 
    ;; Mark
    ["C- " "set-mark"]
@@ -208,6 +209,7 @@
                  ["Tab"   "git-toggle-section"]
                  ["Enter" "git-visit-file"]]
    "git-log"    [["g"     "git-log"]
+                 ["Enter" "git-log-show"]
                  ["q"     "git-log-quit"]]
    "clojure"      []
    "diff"         [["q"     "diff-quit"]]

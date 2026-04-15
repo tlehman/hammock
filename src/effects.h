@@ -15,6 +15,8 @@ typedef enum {
     EDN_BOOL,
     EDN_NIL,
     EDN_VECTOR,
+    EDN_CHAR,
+    EDN_MAP,
 } EdnType;
 
 typedef struct EdnVal {
@@ -23,11 +25,18 @@ typedef struct EdnVal {
         char *str;           /* EDN_KEYWORD (without colon), EDN_STRING */
         long long num;       /* EDN_INT */
         bool bval;           /* EDN_BOOL */
+        int  ch;             /* EDN_CHAR */
         struct {
             struct EdnVal **items;
             int count;
             int capacity;
         } vec;               /* EDN_VECTOR */
+        struct {
+            struct EdnVal **keys;
+            struct EdnVal **vals;
+            int count;
+            int capacity;
+        } map;               /* EDN_MAP */
     };
 } EdnVal;
 
@@ -51,5 +60,8 @@ void state_push_snapshot(void);
  * the buffer or kill ring between a :yank and the next :yank-pop, so M-y
  * says "Previous command was not a yank" just like Emacs. */
 void yank_state_invalidate(void);
+
+/* Look up a value by keyword name in an EDN_MAP. Returns NULL if missing. */
+EdnVal *edn_map_get(EdnVal *m, const char *kw);
 
 #endif

@@ -48,12 +48,14 @@ endif
 # load sequence plus a handful of probes. Run via `make check`.
 SMOKE_SRC = test/smoke.c
 SMOKE_BIN = $(BUILD_DIR)/smoke
+FONT_LOCK_TEST_BIN = $(BUILD_DIR)/font_lock_test
 
 $(SMOKE_BIN): $(SMOKE_SRC) $(LIBSCI) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(SMOKE_SRC) -o $(SMOKE_BIN) $(LDFLAGS) -Wl,-rpath,@executable_path/../libsci
 
-check: $(SMOKE_BIN)
+check: $(SMOKE_BIN) $(FONT_LOCK_TEST_BIN)
 	./$(SMOKE_BIN)
+	./$(FONT_LOCK_TEST_BIN)
 
 # Embed NEWS.md into the binary as a C byte array
 $(NEWS_HEADER): NEWS.md
@@ -153,4 +155,13 @@ $(PAREN_TEST_BIN): test/paren_test.c src/paren.c src/paren.h | $(BUILD_DIR)
 paren-test: $(PAREN_TEST_BIN)
 	./$(PAREN_TEST_BIN)
 
-.PHONY: clean clean-all check install perf-fixtures perf-run perf-baseline perf-diff pty-bench perf-pty paren-test
+# Pure C unit tests for font_lock engine (no SCI, no ncurses).
+$(FONT_LOCK_TEST_BIN): test/font_lock_test.c src/font_lock.c src/font_lock.h src/effects.c src/util.c | $(BUILD_DIR)
+	$(CC) -Wall -Wextra -std=c11 -g -O0 -DFONT_LOCK_TEST_BUILD \
+	    test/font_lock_test.c src/font_lock.c src/effects.c src/util.c \
+	    -o $@
+
+font-lock-test: $(FONT_LOCK_TEST_BIN)
+	./$(FONT_LOCK_TEST_BIN)
+
+.PHONY: clean clean-all check install perf-fixtures perf-run perf-baseline perf-diff pty-bench perf-pty paren-test font-lock-test

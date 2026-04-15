@@ -1,18 +1,21 @@
 #include "effects.h"
+#include "util.h"
+#ifndef FONT_LOCK_TEST_BUILD
 #include "buffer.h"
 #include "window.h"
 #include "command.h"
 #include "sci.h"
 #include "mode.h"
 #include "shell.h"
-#include "util.h"
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 
 /* ---- EDN Mini-Parser ---- */
-/* Restricted subset: vectors, keywords, strings, integers, booleans, nil */
+/* Restricted subset: vectors, maps, keywords, strings, characters,
+ * integers, booleans, nil */
 
 static void vec_push(EdnVal *vec, EdnVal *item) {
     if (vec->vec.count >= vec->vec.capacity) {
@@ -33,6 +36,14 @@ void edn_free(EdnVal *v) {
         for (int i = 0; i < v->vec.count; i++)
             edn_free(v->vec.items[i]);
         free(v->vec.items);
+        break;
+    case EDN_MAP:
+        for (int i = 0; i < v->map.count; i++) {
+            edn_free(v->map.keys[i]);
+            edn_free(v->map.vals[i]);
+        }
+        free(v->map.keys);
+        free(v->map.vals);
         break;
     default:
         break;
@@ -90,6 +101,47 @@ EdnVal *edn_parse(const char *s, size_t len, size_t *consumed) {
         return NULL; /* unterminated vector */
     }
 
+    /* Map */
+    if (ch == '{') {
+        pos++;
+        EdnVal *m = hmalloc(sizeof(EdnVal));
+        m->type = EDN_MAP;
+        m->map.keys = NULL;
+        m->map.vals = NULL;
+        m->map.count = 0;
+        m->map.capacity = 0;
+
+        while (pos < len) {
+            skip_whitespace(s, len, &pos);
+            if (pos < len && s[pos] == '}') {
+                pos++;
+                *consumed = pos;
+                return m;
+            }
+            size_t kc = 0, vc = 0;
+            EdnVal *k = edn_parse(s + pos, len - pos, &kc);
+            if (!k) { edn_free(m); *consumed = pos; return NULL; }
+            pos += kc;
+            skip_whitespace(s, len, &pos);
+            if (pos >= len) { edn_free(k); edn_free(m); *consumed = pos; return NULL; }
+            EdnVal *v = edn_parse(s + pos, len - pos, &vc);
+            if (!v) { edn_free(k); edn_free(m); *consumed = pos; return NULL; }
+            pos += vc;
+
+            if (m->map.count >= m->map.capacity) {
+                m->map.capacity = m->map.capacity ? m->map.capacity * 2 : 8;
+                m->map.keys = hrealloc(m->map.keys, sizeof(EdnVal *) * (size_t)m->map.capacity);
+                m->map.vals = hrealloc(m->map.vals, sizeof(EdnVal *) * (size_t)m->map.capacity);
+            }
+            m->map.keys[m->map.count] = k;
+            m->map.vals[m->map.count] = v;
+            m->map.count++;
+        }
+        edn_free(m);
+        *consumed = pos;
+        return NULL;
+    }
+
     /* Keyword */
     if (ch == ':') {
         pos++;
@@ -141,6 +193,35 @@ EdnVal *edn_parse(const char *s, size_t len, size_t *consumed) {
         sv->str = buf;
         *consumed = pos;
         return sv;
+    }
+
+    /* Character literal: \c, \newline, \space, \tab, \return, \formfeed, \backspace */
+    if (ch == '\\') {
+        pos++;
+        struct { const char *name; int ch; } named[] = {
+            {"newline", '\n'}, {"tab", '\t'}, {"space", ' '},
+            {"return", '\r'}, {"formfeed", '\f'}, {"backspace", '\b'},
+        };
+        EdnVal *cv = hmalloc(sizeof(EdnVal));
+        cv->type = EDN_CHAR;
+        bool matched = false;
+        for (size_t i = 0; i < sizeof(named)/sizeof(named[0]); i++) {
+            size_t nlen = strlen(named[i].name);
+            if (len - pos >= nlen && strncmp(s + pos, named[i].name, nlen) == 0 &&
+                (pos + nlen >= len || !isalnum(s[pos + nlen]))) {
+                cv->ch = named[i].ch;
+                pos += nlen;
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) {
+            if (pos >= len) { free(cv); *consumed = pos; return NULL; }
+            cv->ch = (unsigned char)s[pos];
+            pos++;
+        }
+        *consumed = pos;
+        return cv;
     }
 
     /* Integer (possibly negative) */
@@ -205,6 +286,17 @@ static bool edn_bool_val(EdnVal *v, bool def) {
     return (v && v->type == EDN_BOOL) ? v->bval : def;
 }
 
+EdnVal *edn_map_get(EdnVal *m, const char *kw) {
+    if (!m || m->type != EDN_MAP || !kw) return NULL;
+    for (int i = 0; i < m->map.count; i++) {
+        EdnVal *k = m->map.keys[i];
+        if (k && k->type == EDN_KEYWORD && k->str && strcmp(k->str, kw) == 0)
+            return m->map.vals[i];
+    }
+    return NULL;
+}
+
+#ifndef FONT_LOCK_TEST_BUILD
 /* ---- Effect Executor ---- */
 
 /* Forward declarations */
@@ -942,3 +1034,4 @@ void state_push_snapshot(void) {
     free(snapshot);
 }
 
+#endif /* FONT_LOCK_TEST_BUILD */

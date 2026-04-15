@@ -130,6 +130,21 @@ int main(void) {
     expect_true("C-h e binding exported",
                 "(boolean (some #(and (= \"ch\" (first %)) (= \"view-messages\" (last %))) (hammock.keybindings/export)))");
 
+    puts("\nfont-lock export shape...");
+    expect_true("syntax-modes namespace loaded",
+                "(some? (find-ns 'hammock.syntax-modes))");
+    expect_true("syntax-modes/export returns a vector",
+                "(vector? (hammock.syntax-modes/export))");
+    expect_true("export has at least 6 modes",
+                "(>= (count (hammock.syntax-modes/export)) 6)");
+    expect_true("C mode exported with :syntax-table and :font-lock-keywords",
+                "(boolean (let [c (first (filter #(= \"C\" (:name %)) (hammock.syntax-modes/export)))] "
+                "(and c (map? (:syntax-table (:syntax c))) (vector? (:font-lock-keywords (:syntax c))))))");
+    expect_true("Markdown mode carries :fence",
+                "(boolean (some #(and (= \"Markdown\" (:name %)) (:fence (:syntax %))) (hammock.syntax-modes/export)))");
+    expect_true("Help mode uses :builtin-help engine",
+                "(boolean (some #(and (= \"Help\" (:name %)) (= :builtin-help (:engine (:syntax %)))) (hammock.syntax-modes/export)))");
+
     puts("\nKill ring / yank-pop...");
     expect_true("yank-pop registered",
                 "(contains? @hammock.state/*commands* \"yank-pop\")");

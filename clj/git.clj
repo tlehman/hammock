@@ -72,6 +72,9 @@
 (defn git-log [n]
   (:out (shell/exec ["git" "log" "--oneline" (str "-" n)])))
 
+(defn git-show [sha]
+  (:out (shell/exec ["git" "show" sha])))
+
 (defn- exec-out-err [args]
   (let [r (shell/exec args)]
     (str/trim (str (:out r) (:err r)))))

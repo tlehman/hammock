@@ -103,6 +103,7 @@ static SyntaxLang syntax_lang_from_name(const char *name) {
     if (strcasecmp(name, "markdown") == 0) return LANG_MARKDOWN;
     if (strcasecmp(name, "diff") == 0)     return LANG_DIFF;
     if (strcasecmp(name, "help") == 0)     return LANG_HELP;
+    if (strcasecmp(name, "makefile") == 0) return LANG_MAKEFILE;
     return LANG_NONE;
 }
 
