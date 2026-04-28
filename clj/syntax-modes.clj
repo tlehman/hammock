@@ -64,12 +64,9 @@
    "str" "println" "prn" "pr-str"
    "nil" "true" "false"])
 
-;; Clojure symbol characters. Used to build a custom word boundary that
-;; keeps hyphenated names like `ns-name` together (POSIX [[:<:]]/[[:>:]]
-;; treats `-` as non-word, so `ns` inside `ns-name` would match).
-;; `-` is placed at the start of the character class so it is treated
-;; as a literal, not a range.
-(def ^:private clj-sym-chars "-A-Za-z0-9_!?*+/")
+;; Symbol-aware word boundary. Callers prepend `-` inside the negated class
+;; so `ns-name` doesn't match `ns`.
+(def ^:private clj-sym-chars "A-Za-z0-9_!?*+/")
 
 (def clojure-mode
   {:name "Clojure"
@@ -80,9 +77,12 @@
     :font-lock-keywords
     [;; Keyword-name match with symbol-aware boundaries.
      ;; Subgroup 1 = pre-boundary, 2 = the keyword, 3 = post-boundary.
-     [(str "(^|[^" clj-sym-chars "])("
+     ;; `:` is excluded from the boundary class so `:ns`, `:def`, `:when`
+     ;; etc. don't tokenize their tail as the `ns`/`def`/`when` macro —
+     ;; those are Clojure keyword values, handled by the `:xxx` rule below.
+     [(str "(^|[^-:" clj-sym-chars "])("
            (str/join "|" clj-keywords)
-           ")([^" clj-sym-chars "]|$)")
+           ")([^-:" clj-sym-chars "]|$)")
       [nil :keyword nil]]
      [":[[:alpha:]][[:alnum:]_./:?!-]*"                    :type]
      ["#\"[^\"]*\""                                        :string]
@@ -128,6 +128,7 @@
      ["\\*\\*[^*]+\\*\\*"                        :bold]
      ["__[^_]+__"                               :bold]
      ["\\*[^*[:space:]][^*]*\\*"                :italic]
+     ["(\\$)([^$]+)(\\$)"                       [:math-delim :math :math-delim]]
      ["(!?)\\[[^]]*\\]\\([^)]*\\)"              :link]
      ["\\[\\[[^]]+\\]\\]"                       :link]]
     :fence {:open       "^```([[:alnum:]]*)[[:space:]]*$"

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <wchar.h>
 
 void *hmalloc(size_t size) {
     void *p = malloc(size);
@@ -213,4 +214,30 @@ char *path_join(const char *dir, const char *file) {
         memcpy(p + dlen, file, flen + 1);
     }
     return p;
+}
+
+int utf8_display_width(const char *s, size_t len) {
+    if (!s) return 0;
+    if (len == 0) len = strlen(s);
+    if (len == 0) return 0;
+
+    char *tmp = (char *)hmalloc(len + 1);
+    memcpy(tmp, s, len);
+    tmp[len] = '\0';
+
+    wchar_t *wbuf = (wchar_t *)hmalloc(sizeof(wchar_t) * (len + 1));
+    mbstate_t st;
+    memset(&st, 0, sizeof st);
+    const char *src = tmp;
+    size_t n = mbsrtowcs(wbuf, &src, len + 1, &st);
+    int width;
+    if (n == (size_t)-1) {
+        width = (int)len;  /* fallback: byte count */
+    } else {
+        int w = wcswidth(wbuf, n);
+        width = (w < 0) ? (int)len : w;
+    }
+    free(wbuf);
+    free(tmp);
+    return width;
 }

@@ -587,6 +587,13 @@ int main(int argc, char *argv[]) {
             file_arg_idx = i;
         }
     }
+    /* Capture the caller's cwd before any chdir: used below to resolve
+     * relative file args, and after bootstrap to restore cwd so
+     * user-facing operations see the directory the user invoked hammock
+     * from rather than the source root. */
+    char caller_cwd[4096];
+    bool have_caller_cwd = getcwd(caller_cwd, sizeof(caller_cwd)) != NULL;
+
     /* Resolve the file argument to an absolute path before we chdir
      * into the source root. */
     char *file_arg_abs = NULL;
@@ -596,15 +603,12 @@ int main(int argc, char *argv[]) {
             file_arg_abs = hstrdup(resolved);
         } else if (argv[file_arg_idx][0] == '/') {
             file_arg_abs = hstrdup(argv[file_arg_idx]);
+        } else if (have_caller_cwd) {
+            char joined[8192];
+            snprintf(joined, sizeof(joined), "%s/%s", caller_cwd, argv[file_arg_idx]);
+            file_arg_abs = hstrdup(joined);
         } else {
-            char cwd[4096];
-            if (getcwd(cwd, sizeof(cwd))) {
-                char joined[8192];
-                snprintf(joined, sizeof(joined), "%s/%s", cwd, argv[file_arg_idx]);
-                file_arg_abs = hstrdup(joined);
-            } else {
-                file_arg_abs = hstrdup(argv[file_arg_idx]);
-            }
+            file_arg_abs = hstrdup(argv[file_arg_idx]);
         }
     }
 
@@ -703,9 +707,15 @@ int main(int argc, char *argv[]) {
                         if (pair && pair->type == EDN_VECTOR && pair->vec.count >= 2 &&
                             pair->vec.items[0]->type == EDN_STRING &&
                             pair->vec.items[1]->type == EDN_STRING) {
+                            bool wants_contents = false;
+                            if (pair->vec.count >= 3 &&
+                                pair->vec.items[2]->type == EDN_BOOL) {
+                                wants_contents = pair->vec.items[2]->bval;
+                            }
                             command_register_clojure(
                                 hstrdup(pair->vec.items[0]->str),
-                                hstrdup(pair->vec.items[1]->str));
+                                hstrdup(pair->vec.items[1]->str),
+                                wants_contents);
                         }
                     }
                 }
@@ -721,6 +731,13 @@ int main(int argc, char *argv[]) {
          * Fall back to bare modes_init so buffers at least have names. */
         modes_init();
         message("ERROR: Could not initialize SCI interpreter — no keybindings loaded");
+    }
+
+    /* Restore caller cwd now that bootstrap is done. */
+    if (have_caller_cwd) {
+        if (chdir(caller_cwd) != 0) {
+            message("warning: could not restore caller cwd");
+        }
     }
 
     /* Always create *scratch* buffer */
@@ -795,10 +812,14 @@ int main(int argc, char *argv[]) {
             }
             /* Draw vertical separators between side-by-side windows */
             window_draw_separators();
-            /* Re-position cursor after separators (mvaddch moves it) */
+            /* Re-position cursor after separators (mvaddch moves it). Prefer
+             * the screen coords captured during the render — they account for
+             * math-span Unicode width substitutions that visual_cols does not. */
             {
                 int sy, sx;
-                window_point_to_screen(current_window, &sy, &sx);
+                if (!display_last_cursor(&sy, &sx)) {
+                    window_point_to_screen(current_window, &sy, &sx);
+                }
                 int vis = current_window->rows - 1;
                 if (sx >= current_window->x + current_window->cols)
                     sx = current_window->x + current_window->cols - 1;

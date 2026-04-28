@@ -16,7 +16,8 @@
 ;;  :window-count 1
 ;;  :top-line 0
 ;;  :visible-rows 24
-;;  :current-line "text of line at point"00
+;;  :contents "full text of current buffer"   ;; nil if buffer >2 MB
+;;  :current-line "text of line at point"
 ;;  :line-number 1       ;; 1-indexed
 ;;  :col 0
 ;;  :buffers [{:name "*scratch*" :size 200 :modified false

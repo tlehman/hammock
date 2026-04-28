@@ -16,6 +16,8 @@ typedef struct {
     const char *docstring;     /* Human-readable documentation */
     const char *source;        /* "C" or "Clojure" */
     CommandDispatch dispatch;
+    bool wants_contents;       /* If true, include full buffer text in the
+                                  state snapshot pushed before dispatch. */
 } CommandEntry;
 
 #define MAX_COMMANDS 256
@@ -24,7 +26,8 @@ extern CommandEntry command_table[MAX_COMMANDS];
 extern int command_count;
 
 void command_register(const char *name, CommandFn fn, const char *docstring);
-void command_register_clojure(const char *name, const char *docstring);
+void command_register_clojure(const char *name, const char *docstring,
+                              bool wants_contents);
 CommandEntry *command_find(const char *name);
 CommandFn command_lookup(const char *name);
 void command_execute(const char *name);

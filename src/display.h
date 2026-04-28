@@ -42,4 +42,11 @@ void display_flash_set(Buffer *buf, size_t pos, int ms);
 void display_flash_clear(void);
 int  display_flash_active(void);    /* 0/1, auto-expires */
 
+/* Returns the screen (y,x) where display_refresh_window placed point during
+ * the most recent render of the current window, accounting for math-span
+ * Unicode width substitutions. Returns false if the last render didn't see
+ * point (off-screen), in which case callers should fall back to
+ * window_point_to_screen. */
+bool display_last_cursor(int *sy, int *sx);
+
 #endif

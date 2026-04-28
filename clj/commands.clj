@@ -1,17 +1,22 @@
 (ns hammock.commands
   (:require [hammock.state :as state]
-            [hammock.effects :as fx]
-            [hammock.core :as core]
-            [hammock.git :as git]
-            [hammock.markdown :as md]
-            [hammock.symbols :as symbols]
-            [clojure.string :as str]))
+    [hammock.effects :as fx]
+    [hammock.core :as core]
+    [hammock.git :as git]
+    [hammock.indent :as indent]
+    [hammock.markdown :as md]
+    [hammock.symbols :as symbols]
+    [clojure.string :as str]))
 
-;; Register a command: associates a name string with a map of {:fn f :doc docstring}
+;; Register a command. Stores {:fn f :doc docstring :opts opts} in
+;; state/*commands*. `opts` may include {:wants-contents true}, which tells
+;; the C dispatcher to include the full buffer text in the state snapshot
+;; before invoking the command (see export-command-metadata).
 (defn defcommand
-  ([name f] (defcommand name "" f))
-  ([name docstring f]
-   (swap! state/*commands* assoc name {:fn f :doc docstring})))
+  ([name f] (defcommand name "" {} f))
+  ([name docstring f] (defcommand name docstring {} f))
+  ([name docstring opts f]
+   (swap! state/*commands* assoc name {:fn f :doc docstring :opts opts})))
 
 ;; Dispatch a command by name, return effect vector.
 ;; Any exception thrown by the command body is caught and converted to a
@@ -27,11 +32,15 @@
           [[:message (str "ERROR in " name ": " e)]]))
       [[:message (str "Unknown Clojure command: " name)]])))
 
-;; Export command metadata as [[name docstring] ...] vector for C registration
+;; Export command metadata as [[name docstring wants-contents?] ...] for C
+;; registration.
 (defn export-command-metadata []
   (vec
     (map (fn [[name entry]]
-           [name (if (map? entry) (:doc entry) "")])
+           (let [m? (map? entry)]
+             [name
+              (if m? (:doc entry) "")
+              (boolean (and m? (get-in entry [:opts :wants-contents])))]))
          @state/*commands*)))
 
 ;; ---- Simple movement commands ----
@@ -101,12 +110,8 @@
 (defcommand "newline" "Insert a newline at point."
   (fn [] [[:insert "\n"] [:reset-target-col]]))
 
-(defcommand "self-insert-tab" "Insert spaces to the next tab stop."
-  (fn []
-    ;; Insert spaces to next 4-column tab stop
-    ;; Note: we don't have exact col info from state, so insert 4 spaces
-    ;; The C implementation handles this more precisely
-    [[:insert "    "]]))
+(defcommand "self-insert-tab" "Insert a literal tab stop (4 spaces) at point."
+  (fn [] [[:insert "    "]]))
 
 ;; ---- Mark / region / kill ----
 
@@ -562,6 +567,52 @@
         ;; :none - not on a link, insert newline
         [[:insert "\n"] [:reset-target-col]]))))
 
+(defn- align-table-effects
+  "Compute effects for aligning the markdown table at point. `direction` is
+  :forward (default) or :backward."
+  ([] (align-table-effects :forward))
+  ([direction]
+   (let [s (fx/editor)
+         contents (:contents s)]
+     (cond
+       (nil? contents)
+       [[:message "Buffer too large to align tables."]]
+
+       :else
+       (if-let [r (md/align-table-at contents (:line-number s) (:col s) direction)]
+         (cond-> [[:buffer-set-contents (:new-text r)]
+                  [:point-set (:new-point r)]]
+           (= direction :forward) (conj [:message "Table aligned."]))
+         [[:message "No table at point."]])))))
+
+(defcommand "markdown-align-table"
+  "Align the markdown table at point: pad cells so columns line up (org-mode style)."
+  {:wants-contents true}
+  (fn [] (align-table-effects :forward)))
+
+(defcommand "markdown-prev-cell"
+  "Move point to the previous cell in the markdown table at point. Wraps to the previous row's last cell from the first cell of any row."
+  {:wants-contents true}
+  (fn [] (align-table-effects :backward)))
+
+(defcommand "markdown-tab"
+  "If point is on a markdown table row, align the table and advance to the next cell. Otherwise jump to next link."
+  {:wants-contents true}
+  (fn []
+    (let [line (fx/current-line)]
+      (if (and line (md/table-row? line))
+        (align-table-effects :forward)
+        [[:search-forward "["]]))))
+
+(defcommand "markdown-shift-tab"
+  "If point is on a markdown table row, move to the previous cell. Otherwise jump to previous link."
+  {:wants-contents true}
+  (fn []
+    (let [line (fx/current-line)]
+      (if (and line (md/table-row? line))
+        (align-table-effects :backward)
+        [[:search-backward "["]]))))
+
 (defcommand "markdown-next-link" "Jump to the next link in the buffer."
   (fn []
     [[:search-forward "["]]))
@@ -579,6 +630,32 @@
   (fn []
     [[:search-backward "\n#"]
      [:point-forward 1]]))
+
+(defcommand "indent-for-tab-command"
+  "Indent the current line to its correct indentation (Emacs-style). Computes the target leading-space count from the buffer mode and context, then replaces the current leading whitespace with the correct amount. If the line is already correctly indented, moves point past the indentation."
+  {:wants-contents true}
+  (fn []
+    (let [s          @state/*editor*
+          mode       (:mode s)
+          contents   (:contents s)
+          line-num   (:line-number s)
+          col        (:col s)
+          line       (or (:current-line s) "")
+          cur-indent (indent/leading-spaces line)]
+      (if (nil? contents)
+        [[:insert "    "]]
+        (let [lines         (str/split-lines contents)
+              target-indent (max 0 (indent/compute-indent mode lines (dec line-num)))]
+          (cond
+            (= cur-indent target-indent)
+            (if (< col cur-indent)
+              [[:point-to-line-start] [:point-forward cur-indent]]
+              [])
+            :else
+            (into [[:point-to-line-start]
+                   [:delete-forward cur-indent]]
+                  (when (pos? target-indent)
+                    [[:insert (str/join (repeat target-indent " "))]]))))))))
 
 (defcommand "markdown-go-back" "Go back in link navigation history."
   (fn []

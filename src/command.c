@@ -50,7 +50,8 @@ void command_register(const char *name, CommandFn fn, const char *docstring) {
     command_count++;
 }
 
-void command_register_clojure(const char *name, const char *docstring) {
+void command_register_clojure(const char *name, const char *docstring,
+                              bool wants_contents) {
     /* Skip if a C-native version already exists (C stays as fast path) */
     if (command_find(name)) return;
     if (command_count >= MAX_COMMANDS) return;
@@ -59,6 +60,7 @@ void command_register_clojure(const char *name, const char *docstring) {
     command_table[command_count].docstring = docstring ? docstring : "";
     command_table[command_count].source = "Clojure";
     command_table[command_count].dispatch = CMD_CLOJURE;
+    command_table[command_count].wants_contents = wants_contents;
     command_count++;
 }
 
@@ -104,7 +106,7 @@ void command_dispatch(const char *name, bool clj_available) {
     } else {
         /* Clojure dispatch via SCI */
         uint64_t t0 = perf_now_ns();
-        state_push_snapshot();
+        state_push_snapshot(entry->wants_contents);
         char dispatch_code[256];
         snprintf(dispatch_code, sizeof(dispatch_code),
                  "(hammock.commands/dispatch \"%s\")", name);
@@ -809,7 +811,7 @@ static void cmd_eval_last_sexp(void) {
         return;
     }
 
-    state_push_snapshot();
+    state_push_snapshot(true);
 
     /* Paint the "evaluating" notice before the eval starts so the user sees
      * it even for a slow first fork. The minibuffer is already owned by us

@@ -62,4 +62,8 @@ char *clipboard_paste(void);  /* Returns malloc'd string or NULL */
 bool str_ends_with(const char *s, const char *suffix);
 char *path_join(const char *dir, const char *file);
 
+/* UTF-8 display column width via mbsrtowcs + wcswidth. Falls back to byte
+ * count on conversion failure. `len` may be 0 to scan to NUL. */
+int utf8_display_width(const char *s, size_t len);
+
 #endif

@@ -299,9 +299,6 @@ EdnVal *edn_map_get(EdnVal *m, const char *kw) {
 #ifndef FONT_LOCK_TEST_BUILD
 /* ---- Effect Executor ---- */
 
-/* Forward declarations */
-static void edn_escape_string(char *out, size_t outsize, const char *s);
-
 /* The kill ring used by commands; defined in command.c */
 extern KillRing kill_ring;
 
@@ -895,8 +892,7 @@ int effects_execute(const char *edn_effects) {
 
 /* ---- State Snapshot ---- */
 
-/* Escape a string for EDN output */
-static void edn_escape_string(char *out, size_t outsize, const char *s) {
+void edn_escape_string(char *out, size_t outsize, const char *s) {
     size_t o = 0;
     out[o++] = '"';
     for (size_t i = 0; s[i] && o + 4 < outsize; i++) {
@@ -913,7 +909,7 @@ static void edn_escape_string(char *out, size_t outsize, const char *s) {
     out[o] = '\0';
 }
 
-char *state_snapshot_edn(void) {
+char *state_snapshot_edn(bool include_contents) {
     Buffer *buf = current_buffer;
     Window *win = current_window;
 
@@ -927,6 +923,32 @@ char *state_snapshot_edn(void) {
         free(raw_line);
     } else {
         snprintf(line_escaped, sizeof(line_escaped), "\"\"");
+    }
+
+    /* Build :contents — full buffer text, EDN-escaped. Only built when the
+     * dispatching command opts in (most commands don't need it) and capped
+     * at 2 MB so giant buffers degrade to nil rather than blocking the
+     * keystroke. Clojure callers treat nil as "buffer too large for this
+     * operation". */
+    const size_t contents_cap = 2 * 1024 * 1024;
+    char *contents = NULL;
+    size_t contents_len = 0;
+    size_t buflen = buffer_length(buf);
+    if (include_contents && buflen <= contents_cap) {
+        char *raw = buffer_contents(buf);
+        if (raw) {
+            size_t alloc = buflen * 2 + 4;
+            if (alloc < 32) alloc = 32;
+            contents = hmalloc(alloc);
+            edn_escape_string(contents, alloc, raw);
+            contents_len = strlen(contents);
+            free(raw);
+        }
+    }
+    if (!contents) {
+        contents = hmalloc(8);
+        memcpy(contents, "nil", 4);
+        contents_len = 3;
     }
 
     /* Build buffer list EDN */
@@ -969,7 +991,7 @@ char *state_snapshot_edn(void) {
     buflist[buflist_len] = '\0';
 
     /* Build EDN map with current editor state metadata */
-    size_t cap = 2048 + buflist_len;
+    size_t cap = 2048 + buflist_len + contents_len;
     char *edn = hmalloc(cap);
 
     char name_escaped[256];
@@ -998,6 +1020,7 @@ char *state_snapshot_edn(void) {
         " :window-count %d"
         " :top-line %d"
         " :visible-rows %d"
+        " :contents %s"
         " :current-line %s"
         " :line-number %d"
         " :col %d"
@@ -1014,17 +1037,19 @@ char *state_snapshot_edn(void) {
         window_count(),
         win->top_line,
         win->rows - 1,
+        contents,
         line_escaped,
         line_num + 1,  /* 1-indexed for Clojure */
         col,
         buflist);
 
     free(buflist);
+    free(contents);
     return edn;
 }
 
-void state_push_snapshot(void) {
-    char *snapshot = state_snapshot_edn();
+void state_push_snapshot(bool include_contents) {
+    char *snapshot = state_snapshot_edn(include_contents);
     size_t code_len = strlen(snapshot) + 64;
     char *code = hmalloc(code_len);
     snprintf(code, code_len, "(reset! hammock.state/*editor* %s)", snapshot);

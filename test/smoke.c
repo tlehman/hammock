@@ -92,6 +92,16 @@ int main(void) {
         }
     }
 
+    puts("\nlatex2unicode library...");
+    expect_true("latex2unicode namespace loaded",
+                "(some? (find-ns 'latex2unicode))");
+    expect_true("(latex2unicode \"\\\\alpha\") = \"α\"",
+                "(= \"α\" (latex2unicode/latex2unicode \"\\\\alpha\"))");
+    expect_true("(latex2unicode \"\\\\mathcal{H}\") = \"ℋ\"",
+                "(= \"ℋ\" (latex2unicode/latex2unicode \"\\\\mathcal{H}\"))");
+    expect_true("(latex2unicode \"a^{12}\") expands braced superscript",
+                "(= \"a¹²\" (latex2unicode/latex2unicode \"a^{12}\"))");
+
     puts("\nSymbol index probes...");
     expect_true("symbols/ensure! returns a map",
                 "(map? (hammock.symbols/ensure!))");
@@ -160,6 +170,82 @@ int main(void) {
     /* M-y = 121 with MOD_META (2). */
     expect_true("M-y bound to yank-pop",
                 "(boolean (some #(and (= \"global\" (first %)) (= 121 (nth % 1)) (= 2 (nth % 2)) (= \"yank-pop\" (last %))) (hammock.keybindings/export)))");
+
+    puts("\nMarkdown table alignment...");
+    expect_true("table-row? detects pipe row",
+                "(hammock.markdown/table-row? \"| A | B |\")");
+    expect_true("table-row? rejects plain text",
+                "(not (hammock.markdown/table-row? \"hello world\"))");
+    expect_true("separator-row? detects |---|---|",
+                "(hammock.markdown/separator-row? \"|---|---|\")");
+    expect_true("separator-row? honors alignment colons",
+                "(hammock.markdown/separator-row? \"| :--- | ---: | :---: |\")");
+    expect_true("find-table-bounds returns the contiguous block",
+                "(= [0 2] (hammock.markdown/find-table-bounds "
+                "  [\"| A | B |\" \"|---|---|\" \"| 1 | 2 |\" \"\"] 1))");
+    expect_true("align-table-at pads cells to equal widths",
+                "(let [t \"| A | BB |\\n|---|---|\\n| 1 | 2 |\\n\" "
+                "      r (hammock.markdown/align-table-at t 1 0)] "
+                "  (and (some? r) "
+                "       (clojure.string/includes? (:new-text r) \"| A | BB |\") "
+                "       (clojure.string/includes? (:new-text r) \"| 1 | 2  |\")))");
+    expect_true("align-table-at returns nil off a table",
+                "(nil? (hammock.markdown/align-table-at \"hello\\nworld\" 1 0))");
+    /* Stub row recognition: a half-typed row starting with `|` is still a
+     * table row and gets scaffolded with empty cells. */
+    expect_true("table-row? recognizes a stub `|` row",
+                "(hammock.markdown/table-row? \"|\")");
+    expect_true("align-table-at scaffolds an empty row from a stub `|`",
+                "(let [t \"| name | age |\\n|------|-----|\\n|\" "
+                "      r (hammock.markdown/align-table-at t 3 1)] "
+                "  (and (some? r) "
+                "       (clojure.string/includes? (:new-text r) \"|      |     |\")))");
+    expect_true("align-table-at on stub row places point in cell 0",
+                "(let [t \"| name | age |\\n|------|-----|\\n|\" "
+                "      r (hammock.markdown/align-table-at t 3 1)] "
+                "  (= 32 (:new-point r)))");
+    /* Cell navigation: cursor in cell 0 advances to cell 1. */
+    expect_true("align-table-at advances point to next cell",
+                "(let [t \"| foo | bar |\\n|-----|-----|\\n| 1 | 2 |\\n\" "
+                "      r (hammock.markdown/align-table-at t 1 3)] "
+                "  (= 8 (:new-point r)))");
+    /* Wrap: cursor in last cell of last row appends a new empty row. */
+    expect_true("align-table-at appends a new row when wrapping past last cell",
+                "(let [t \"| a | b |\\n|---|---|\\n| 1 | 2 |\" "
+                "      r (hammock.markdown/align-table-at t 3 9)] "
+                "  (and (some? r) "
+                "       (= 4 (count (clojure.string/split-lines (:new-text r)))) "
+                "       (clojure.string/ends-with? (:new-text r) \"|   |   |\")))");
+    /* Backward navigation: cell 1 → cell 0. */
+    expect_true("align-table-at :backward moves point one cell left",
+                "(let [t \"| foo | bar |\\n|-----|-----|\\n| 1 | 2 |\\n\" "
+                "      r (hammock.markdown/align-table-at t 1 9 :backward)] "
+                "  (= 2 (:new-point r)))");
+    /* Backward wrap: cell 0 of row 2 → last cell of row 0 (skipping separator). */
+    expect_true("align-table-at :backward wraps past first cell to previous data row's last cell",
+                "(let [t \"| a | b |\\n|---|---|\\n| 1 | 2 |\\n\" "
+                "      r (hammock.markdown/align-table-at t 3 2 :backward)] "
+                "  (= 6 (:new-point r)))");
+    expect_true("markdown-prev-cell registered",
+                "(contains? @hammock.state/*commands* \"markdown-prev-cell\")");
+    expect_true("markdown-shift-tab registered",
+                "(contains? @hammock.state/*commands* \"markdown-shift-tab\")");
+    /* Shift-Tab in markdown mode now dispatches to markdown-shift-tab. */
+    expect_true("markdown Shift-Tab binding points at markdown-shift-tab",
+                "(boolean (some #(and (= \"mode:markdown\" (first %)) "
+                "                     (= 4109 (nth % 1)) "    /* HK_SHIFT_TAB = 0x100D */
+                "                     (= \"markdown-shift-tab\" (last %))) "
+                "               (hammock.keybindings/export)))");
+    expect_true("markdown-align-table registered",
+                "(contains? @hammock.state/*commands* \"markdown-align-table\")");
+    expect_true("markdown-tab registered",
+                "(contains? @hammock.state/*commands* \"markdown-tab\")");
+    /* Tab in markdown mode now dispatches to markdown-tab, not -next-link. */
+    expect_true("markdown Tab binding points at markdown-tab",
+                "(boolean (some #(and (= \"mode:markdown\" (first %)) "
+                "                     (= 4107 (nth % 1)) "    /* HK_TAB = 0x100B */
+                "                     (= \"markdown-tab\" (last %))) "
+                "               (hammock.keybindings/export)))");
 
     puts("\n*Messages* plumbing...");
     expect_true("view-messages registered",

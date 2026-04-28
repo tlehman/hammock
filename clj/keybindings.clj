@@ -115,7 +115,7 @@
    ["Delete" "delete-char"]
    ["Backspace" "delete-backward-char"]
    ["Enter" "newline"]
-   ["Tab" "self-insert-tab"]
+   ["Tab" "indent-for-tab-command"]
 
    ;; Kill/yank
    ["C-k" "kill-line"]
@@ -191,8 +191,8 @@
 ;; Mode-specific keybindings
 (def mode-bindings
   {"markdown"   [["Enter"     "markdown-follow-link"]
-                 ["Tab"       "markdown-next-link"]
-                 ["Shift-Tab" "markdown-prev-link"]
+                 ["Tab"       "markdown-tab"]
+                 ["Shift-Tab" "markdown-shift-tab"]
                  ["l"         "markdown-go-back"]
                  ["n"         "markdown-next-heading"]
                  ["p"         "markdown-prev-heading"]]

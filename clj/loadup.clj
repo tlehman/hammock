@@ -8,12 +8,15 @@
 (ns hammock.loadup)
 
 (def files
-  ["clj/state.clj"
+  ["clj/latex2unicode/data.clj"
+   "clj/latex2unicode.clj"
+   "clj/state.clj"
    "clj/effects.clj"
    "clj/core.clj"
    "clj/git.clj"
    "clj/markdown.clj"
    "clj/symbols.clj"
+   "clj/indent.clj"
    "clj/commands.clj"
    "clj/keybindings.clj"
    "clj/syntax-modes.clj"

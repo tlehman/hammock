@@ -50,11 +50,13 @@ void edn_free(EdnVal *v);
 int effects_execute(const char *edn_effects);
 
 /* Build an EDN state snapshot string from current C editor state.
- * Caller must free the returned string. */
-char *state_snapshot_edn(void);
+ * `include_contents` controls whether :contents is the full buffer text or
+ * nil — full-buffer escape is expensive on large files, so the dispatcher
+ * only opts in for commands that actually read it. Caller must free. */
+char *state_snapshot_edn(bool include_contents);
 
 /* Push state snapshot to Clojure *editor* atom. */
-void state_push_snapshot(void);
+void state_push_snapshot(bool include_contents);
 
 /* Drop the yank state used by :yank-pop. Call from any command that mutates
  * the buffer or kill ring between a :yank and the next :yank-pop, so M-y
@@ -63,5 +65,9 @@ void yank_state_invalidate(void);
 
 /* Look up a value by keyword name in an EDN_MAP. Returns NULL if missing. */
 EdnVal *edn_map_get(EdnVal *m, const char *kw);
+
+/* Wrap `s` in `"..."` and escape `"` `\` `\n` `\t` `\r` for EDN. Writes up to
+ * outsize-1 bytes plus NUL; truncates if the buffer is too small. */
+void edn_escape_string(char *out, size_t outsize, const char *s);
 
 #endif

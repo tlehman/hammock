@@ -196,6 +196,36 @@ static void test_fence_close(void) {
     }
 }
 
+/* `-` must stay in the leading literal slot of the negated class.
+ * `[^:-A-Za-z…]` parses as a 0x3A–0x41 range and BSD regex rejects it. */
+static void test_clojure_keyword_boundary(void) {
+    const char *edn =
+        "[{:name \"Clojure\""
+        " :syntax {:syntax-table {:comment-line \";\""
+        "                         :string-delims [\\\"] :string-escape \\\\}"
+        "          :font-lock-keywords "
+        "           [[\"(^|[^-:A-Za-z0-9_!?*+/])(def|defn|ns)([^-:A-Za-z0-9_!?*+/]|$)\""
+        "             [nil :keyword nil]]]}}]";
+    font_lock_load_from_edn_string(edn);
+    const char *line = "(ns hammock.core";
+    LineHighlight hl = font_lock_highlight_named("Clojure", line, (int)strlen(line), 0);
+    bool found_ns = false;
+    for (int i = 0; i < hl.count; i++) {
+        if (hl.spans[i].type == TOK_KEYWORD &&
+            hl.spans[i].start == 1 && hl.spans[i].length == 2) {
+            found_ns = true; break;
+        }
+    }
+    if (found_ns) printf("  PASS clojure-keyword-boundary\n");
+    else {
+        printf("  FAIL clojure-keyword-boundary: expected :keyword span at [1,2] for `ns`\n");
+        for (int i = 0; i < hl.count; i++)
+            printf("    got [%d] start=%d len=%d type=%d\n",
+                   i, hl.spans[i].start, hl.spans[i].length, hl.spans[i].type);
+        failures++;
+    }
+}
+
 static void test_help_fallback(void) {
     const char *edn =
         "[{:name \"Help\" :syntax {:engine :builtin-help}}]";
@@ -209,6 +239,25 @@ static void test_help_fallback(void) {
         if (hl.spans[i].type == TOK_FUNCTION) { found = true; break; }
     if (found) printf("  PASS help-fallback\n");
     else { printf("  FAIL help-fallback: no function span (got %d spans)\n", hl.count); failures++; }
+}
+
+static void test_markdown_inline_math(void) {
+    const char *edn =
+        "[{:name \"Markdown\""
+        " :syntax {:syntax-table {}"
+        "          :font-lock-keywords"
+        "           [[\"(\\\\$)([^$]+)(\\\\$)\" [:math-delim :math :math-delim]]]}}]";
+    font_lock_load_from_edn_string(edn);
+    const char *line = "text $\\alpha$ more";
+    /* offsets: t=0 e=1 x=2 t=3 ' '=4 $=5 \\=6 a=7 l=8 p=9 h=10 a=11 $=12 ' '=13 m=14
+     * delim '$' at 5 (length 1), content "\\alpha" at [6,12) (length 6), delim '$' at 12 */
+    LineHighlight hl = font_lock_highlight_named("Markdown", line, (int)strlen(line), 0);
+    SyntaxSpan expect[] = {
+        {5,  1, TOK_MATH_DELIM},
+        {6,  6, TOK_MATH},
+        {12, 1, TOK_MATH_DELIM},
+    };
+    expect_spans("markdown-inline-math", hl, 3, expect);
 }
 
 int main(void) {
@@ -226,7 +275,9 @@ int main(void) {
     test_fence_open();
     test_fence_inner_highlight();
     test_fence_close();
+    test_clojure_keyword_boundary();
     test_help_fallback();
+    test_markdown_inline_math();
     printf("\n%d failure(s)\n", failures);
     return failures > 0 ? 1 : 0;
 }

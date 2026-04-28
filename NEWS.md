@@ -1,5 +1,96 @@
 # Hammock NEWS -- history of user-visible changes.
 
+## v0.2.7
+
+- **`Tab` now indents the current line to its correct position (Emacs-style
+  `indent-for-tab-command`).** The global `Tab` binding was changed from
+  `self-insert-tab` (which blindly inserted 4 spaces) to
+  `indent-for-tab-command`, which computes the correct leading-space count
+  for the current line based on the buffer's major mode and replaces the
+  existing leading whitespace with the right amount. If the line is already
+  at the correct indentation, pressing `Tab` is a no-op (or moves point to
+  the first non-space character if the cursor is before the indentation
+  column). For buffers larger than 2 MB (where `:contents` is `nil`), the
+  command falls back to inserting 4 spaces. All logic lives in Clojure
+  (`clj/indent.clj` for the per-mode algorithms; the command itself is
+  registered in `clj/commands.clj`).
+- **Clojure indentation** (`clj/indent.clj:clojure-indent`): walks the text
+  before the current line tracking delimiter nesting while skipping strings
+  and `;` line comments. Anchors the scan at the last top-level `(` for
+  performance. Returns `paren-col + 2` for `(` (body indentation) and
+  `bracket-col + 1` for `[` / `{` (content alignment). Handles common
+  Clojure patterns: `(defn foo []\n  body)` → col 2;
+  `(let [x 1\n      y 2]` → col 8 (aligning with `x`);
+  `(let [...]\n  body)` → col 4.
+- **C indentation** (`clj/indent.clj:c-indent`): counts net `{` / `}`
+  depth in all preceding text (skipping string literals and `//` / `/* */`
+  comments), multiplies by 4. Lines starting with `}` de-dent by one level.
+- **Bash indentation** (`clj/indent.clj:bash-indent`): increments depth on
+  `then` / `do` (from `if` / `for` / `while` / `until` / `function`) and
+  decrements on `fi` / `done` / `esac` / `}`. Indent unit is 2 spaces.
+- **Default indentation**: for Fundamental, Markdown, Makefile, and any
+  unrecognized mode, matches the leading-space count of the previous
+  non-blank line.
+- **Inline `$...$` LaTeX math renders again, now via the
+  [`latex2unicode`](https://github.com/tlehman/latex2unicode) Clojure
+  library.** v0.1.1 introduced math rendering through a 79-entry
+  hand-rolled `math_subs[]` table in `src/display.c`; the v0.2.6
+  font-lock rewrite moved syntax to Clojure but the markdown `$...$`
+  regex rule was never carried over, so math rendering had been
+  silently broken since v0.2.6. The fix vendors the `latex2unicode`
+  library (`clj/latex2unicode.clj` + `clj/latex2unicode/data.clj`,
+  ~4200 substitutions plus combining marks like `\hat{x}` → x̂ and
+  braced sub/sup like `a^{12}` → a¹²) and adds a
+  `(\$)([^$]+)(\$)` keyword rule to `clj/syntax-modes.clj` that emits
+  `TOK_MATH_DELIM / TOK_MATH / TOK_MATH_DELIM` spans. The C kernel
+  keeps a 512-entry LRU cache (`math_cache_get_or_compute` in
+  `src/display.c`) keyed by span source text; on miss it calls
+  `(latex2unicode/latex2unicode "...")` via `sci_eval` once, and
+  renders the entire span atomically with `mvaddstr`. The deleted
+  `math_subs[]` and `math_sub_at()` C substitution path is gone.
+- **Cursor-in-span shows the LaTeX source (preview-latex semantics).**
+  When the cursor is inside a `$...$` span, or sitting on either `$`
+  delimiter, the renderer falls back to per-byte source rendering so
+  the user can edit the LaTeX comfortably. The moment the cursor
+  leaves the span, the unicode preview returns. No flicker, no toggle
+  command, no per-buffer state: the check is a single inline
+  `cursor_off` comparison against `[span_start - 1, span_end + 1]` in
+  `display_refresh_window`.
+- **Known limitation: escaped `\$` is not detected.** POSIX ERE in the
+  font-lock keyword pass has no lookbehind, so a literal `\$` inside a
+  paragraph still opens a math span. Workaround for now: write the
+  dollar sign with HTML `&#36;` or wrap the surrounding text in
+  backticks. A future Clojure-side post-filter can add escape handling.
+- **Markdown tables auto-align and `Tab` / `Shift-Tab` walk cells
+  like org-mode.** Pressing `Tab` on any markdown table row realigns
+  the entire table (column widths computed across the data rows,
+  separator row expanding to match) and advances point to the next
+  cell. `Shift-Tab` aligns and moves to the previous cell. From the
+  last cell of the last data row, `Tab` appends a new empty row and
+  point lands in its first cell. From the first cell of any row,
+  `Shift-Tab` wraps to the previous data row's last cell (or stays
+  put if already at the table start). On a half-typed row like just
+  `|`, the row is scaffolded with the right number of empty cells
+  and point lands in cell 0 — type once, hit Tab, fill in the rest.
+  Header alignment markers (`:--`, `--:`, `:-:`) are honored.
+  Outside a table, `Tab` and `Shift-Tab` still jump to the next /
+  previous link as before. The commands are also available as
+  `M-x markdown-align-table` and `M-x markdown-prev-cell`.
+  All parsing, width computation, navigation, and rendering live in
+  `clj/markdown.clj`; dispatchers and commands live in
+  `clj/commands.clj`. No new C effects, no display transform.
+- **Buffer text now reaches Clojure commands.** The state snapshot
+  pushed to `*editor*` before each Clojure-command dispatch gains a
+  `:contents` key with the full current-buffer text (capped at 2 MB;
+  `nil` above that, so Clojure callers can degrade gracefully).
+  Until now Clojure commands could only see `:current-line`, which
+  forced any multi-line feature (table alignment, TOC against the
+  live buffer, future LSP wiring) into the C layer. This unblocks
+  the README TODO "move git/markdown commands fully to Clojure (add
+  query effects for buffer content access)". Implementation in
+  `state_snapshot_edn` (`src/effects.c`) reuses the dynamic-realloc
+  pattern from the existing `:buffers` field. ~50 lines of C.
+
 ## v0.2.6
 
 - **Syntax highlighting moved to Clojure (Emacs-style font-lock).** Mode

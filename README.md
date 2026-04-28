@@ -60,10 +60,7 @@ Users can modify editor behavior live via `C-j` in the scratch buffer.
 
 ## TODO 
 - [ ] feature: rattles spinner for long-running external process: [rattles](https://github.com/vyfor/rattles)
-- [ ] feature: in markdown mode, tables are displayed with padding and look rectangular (like org-mode)
-- [ ] feature: render LaTeX expressions between dollar signs using [LaTeX-2-Unicode](https ://github.com/tlehman/latex2unicode) library
 - [ ] feature: in *scratch* buffer, format all the outputted source code
-- [ ] feature: tab and code indenting correctly
 - [ ] feature: add mermaidjs tui-rendering for markdown mode
 - [ ] feature: interactive vs non-interactive fns
 - [ ] feature: LSP support for other languages
